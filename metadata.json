@@ -1,0 +1,6 @@
+{
+  "name": "ClipForge",
+  "description": "AI-powered viral clip generator",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
