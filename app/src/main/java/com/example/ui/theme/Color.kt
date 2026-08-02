@@ -4,17 +4,35 @@ import androidx.compose.ui.graphics.Color
 
 val NeonOrange = Color(0xFFFF6C00)
 val NeonOrangeVariant = Color(0xFFFF8800)
-val ElectricViolet = Color(0xFF9D4EDD)
-val HotPink = Color(0xFFFF007F)
+val ElectricViolet = Color(0xFF7C3AED)
+val HotPink = Color(0xFFEC4899)
 
-val DarkBackground = Color(0xFF0E0E14)
-val DarkSurface = Color(0xFF181822)
-val DarkSurfaceVariant = Color(0xFF242432)
-val DarkCardBorder = Color(0xFF323246)
+// Dark Theme Palette
+val DarkBackground = Color(0xFF0F172A)
+val DarkSurface = Color(0xFF1E293B)
+val DarkSurfaceVariant = Color(0xFF334155)
+val DarkCardBorder = Color(0xFF475569)
 
-val TextPrimary = Color(0xFFF0F0F8)
-val TextSecondary = Color(0xFFA0A0B8)
-val TextMuted = Color(0xFF6E6E88)
+// Light Theme Palette
+val LightBackground = Color(0xFFF8FAFC)
+val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFF1F5F9)
+val LightCardBorder = Color(0xFFE2E8F0)
 
-val SuccessGreen = Color(0xFF00E676)
-val ErrorRed = Color(0xFFFF5252)
+// Text Colors
+val TextPrimaryDark = Color(0xFFF8FAFC)
+val TextSecondaryDark = Color(0xFF94A3B8)
+val TextMutedDark = Color(0xFF64748B)
+
+val TextPrimaryLight = Color(0xFF0F172A)
+val TextSecondaryLight = Color(0xFF475569)
+val TextMutedLight = Color(0xFF64748B)
+
+// Keep legacy color variables for backward compatibility
+val TextPrimary = TextPrimaryDark
+val TextSecondary = TextSecondaryDark
+val TextMuted = TextMutedDark
+
+val SuccessGreen = Color(0xFF10B981)
+val ErrorRed = Color(0xFFEF4444)
+

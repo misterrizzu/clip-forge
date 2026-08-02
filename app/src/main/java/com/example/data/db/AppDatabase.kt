@@ -1,11 +1,22 @@
 package com.example.data.db
 
 import androidx.room.*
-import com.example.data.ViralClip
+
+@Entity(tableName = "projects")
+data class ProjectEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val videoFileName: String,
+    val videoSourceUriOrUrl: String = "",
+    val clipCount: Int = 0,
+    val thumbnailPath: String? = null,
+    val createdAtMs: Long = System.currentTimeMillis()
+)
 
 @Entity(tableName = "viral_clips")
 data class ClipEntity(
     @PrimaryKey val id: String,
+    val projectId: String = "default_project",
     val startTimeSeconds: Float,
     val endTimeSeconds: Float,
     val confidenceScore: Float,
@@ -42,6 +53,21 @@ data class QueueItemEntity(
 
 @Dao
 interface ClipDao {
+    @Query("SELECT * FROM projects ORDER BY createdAtMs DESC")
+    suspend fun getAllProjects(): List<ProjectEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProject(project: ProjectEntity)
+
+    @Query("UPDATE projects SET name = :newName WHERE id = :projectId")
+    suspend fun renameProject(projectId: String, newName: String)
+
+    @Query("DELETE FROM projects WHERE id = :projectId")
+    suspend fun deleteProject(projectId: String)
+
+    @Query("SELECT * FROM viral_clips WHERE projectId = :projectId ORDER BY timestampMs DESC")
+    suspend fun getClipsForProject(projectId: String): List<ClipEntity>
+
     @Query("SELECT * FROM viral_clips ORDER BY timestampMs DESC")
     suspend fun getAllClips(): List<ClipEntity>
 
@@ -53,6 +79,9 @@ interface ClipDao {
 
     @Query("DELETE FROM viral_clips WHERE id = :id")
     suspend fun deleteClip(id: String)
+
+    @Query("DELETE FROM viral_clips WHERE projectId = :projectId")
+    suspend fun deleteClipsForProject(projectId: String)
 
     @Query("DELETE FROM viral_clips")
     suspend fun deleteAllClips()
@@ -73,7 +102,7 @@ interface ClipDao {
     suspend fun clearCompletedQueue()
 }
 
-@Database(entities = [ClipEntity::class, QueueItemEntity::class], version = 1, exportSchema = false)
+@Database(entities = [ProjectEntity::class, ClipEntity::class, QueueItemEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun clipDao(): ClipDao
 

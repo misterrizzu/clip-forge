@@ -84,38 +84,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _activePreviewClip = MutableStateFlow<ViralClip?>(null)
     val activePreviewClip: StateFlow<ViralClip?> = _activePreviewClip.asStateFlow()
 
+    private val sharedPrefs = application.getSharedPreferences("clipforge_prefs", Context.MODE_PRIVATE)
+
+    private val _isDarkMode = MutableStateFlow(sharedPrefs.getBoolean("is_dark_mode", true))
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    private val _enablePreRenderReview = MutableStateFlow(sharedPrefs.getBoolean("enable_pre_render_review", true))
+    val enablePreRenderReview: StateFlow<Boolean> = _enablePreRenderReview.asStateFlow()
+
+    private val _showHookBanner = MutableStateFlow(true)
+    val showHookBanner: StateFlow<Boolean> = _showHookBanner.asStateFlow()
+
+    private val _showSubtitlesBanner = MutableStateFlow(true)
+    val showSubtitlesBanner: StateFlow<Boolean> = _showSubtitlesBanner.asStateFlow()
+
+    private val _currentProjectId = MutableStateFlow<String?>(null)
+    val currentProjectId: StateFlow<String?> = _currentProjectId.asStateFlow()
+
+    private val _projectFolders = MutableStateFlow<List<ProjectFolder>>(emptyList())
+    val projectFolders: StateFlow<List<ProjectFolder>> = _projectFolders.asStateFlow()
+
     init {
-        // Restore persisted clips and batch queue state from Room DB
+        loadProjects()
+        // Restore persisted queue state from Room DB
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val dbClips = clipDao.getAllClips().map { entity ->
-                    ViralClip(
-                        id = entity.id,
-                        startTimeSeconds = entity.startTimeSeconds,
-                        endTimeSeconds = entity.endTimeSeconds,
-                        confidenceScore = entity.confidenceScore,
-                        suggestedHookText = entity.suggestedHookText,
-                        reason = entity.reason,
-                        title = entity.title,
-                        description = entity.description,
-                        tags = entity.tagsCsv.split(",").map { it.trim() }.filter { it.isNotBlank() },
-                        processedVideoPath = entity.processedVideoPath,
-                        thumbnailPath = entity.thumbnailPath,
-                        manualCropOffset = entity.cropOffset,
-                        subtitles = parseSubtitlesJson(entity.subtitlesJson),
-                        isCompliant = entity.isCompliant,
-                        complianceDetails = entity.complianceNote,
-                        showTitle = entity.showTitle,
-                        showDescription = entity.showDescription,
-                        showTags = entity.showTags,
-                        isExported = entity.isExported
-                    )
-                }
-                if (dbClips.isNotEmpty()) {
-                    _clips.value = dbClips
-                    _processingStatus.value = ProcessingPipelineStatus.Success(dbClips)
-                }
-
                 val dbQueue = clipDao.getQueueItems().map { entity ->
                     BatchQueueTask(
                         id = entity.id,
@@ -131,9 +124,98 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _batchQueue.value = dbQueue
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Error restoring from Room database", e)
+                Log.e("MainViewModel", "Error restoring queue from Room database", e)
             }
         }
+    }
+
+    fun toggleTheme() {
+        val newDark = !_isDarkMode.value
+        _isDarkMode.value = newDark
+        sharedPrefs.edit().putBoolean("is_dark_mode", newDark).apply()
+    }
+
+    fun setEnablePreRenderReview(enable: Boolean) {
+        _enablePreRenderReview.value = enable
+        sharedPrefs.edit().putBoolean("enable_pre_render_review", enable).apply()
+    }
+
+    fun setShowHookBanner(show: Boolean) {
+        _showHookBanner.value = show
+    }
+
+    fun setShowSubtitlesBanner(show: Boolean) {
+        _showSubtitlesBanner.value = show
+    }
+
+    fun loadProjects() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val projects = clipDao.getAllProjects().map { entity ->
+                    ProjectFolder(
+                        id = entity.id,
+                        name = entity.name,
+                        videoFileName = entity.videoFileName,
+                        clipCount = entity.clipCount,
+                        thumbnailPath = entity.thumbnailPath,
+                        createdAtMs = entity.createdAtMs
+                    )
+                }
+                _projectFolders.value = projects
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error loading projects", e)
+            }
+        }
+    }
+
+    fun openProjectFolder(projectId: String) {
+        _currentProjectId.value = projectId
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val dbClips = clipDao.getClipsForProject(projectId).map { entityToViralClip(it) }
+                _clips.value = dbClips
+                _processingStatus.value = ProcessingPipelineStatus.Success(dbClips)
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error opening project folder", e)
+            }
+        }
+    }
+
+    fun renameProject(projectId: String, newName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                clipDao.renameProject(projectId, newName)
+                loadProjects()
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error renaming project", e)
+            }
+        }
+    }
+
+    fun deleteProject(projectId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                clipDao.deleteClipsForProject(projectId)
+                clipDao.deleteProject(projectId)
+                if (_currentProjectId.value == projectId) {
+                    _currentProjectId.value = null
+                    _clips.value = emptyList()
+                    _processingStatus.value = ProcessingPipelineStatus.Idle
+                }
+                loadProjects()
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error deleting project", e)
+            }
+        }
+    }
+
+    fun startNewSession() {
+        _currentProjectId.value = null
+        _clips.value = emptyList()
+        _localVideoUri.value = null
+        _localVideoName.value = null
+        _gdriveUrl.value = ""
+        _processingStatus.value = ProcessingPipelineStatus.Idle
     }
 
     fun updateApiKey(key: String): Boolean {
@@ -343,10 +425,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                val totalClips = rawClips.size
+                if (_enablePreRenderReview.value) {
+                    _processingStatus.value = ProcessingPipelineStatus.ReviewCandidateClips(rawClips, videoFile)
+                } else {
+                    confirmAndRenderSelectedClips(rawClips, videoFile)
+                }
+
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Clip generation pipeline error", e)
+                _processingStatus.value = ProcessingPipelineStatus.Error(e.localizedMessage ?: "Processing error occurred.")
+            }
+        }
+    }
+
+    fun confirmAndRenderSelectedClips(approvedClips: List<RawGeminiClip>, videoFile: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (approvedClips.isEmpty()) {
+                    _processingStatus.value = ProcessingPipelineStatus.Error("No clips were selected for rendering.")
+                    return@launch
+                }
+
+                val projectId = "project_${UUID.randomUUID().toString().take(8)}"
+                val videoName = _localVideoName.value ?: videoFile.name
+                val totalClips = approvedClips.size
                 val generatedViralClips = mutableListOf<ViralClip>()
 
-                rawClips.forEachIndexed { index, rawClip ->
+                approvedClips.forEachIndexed { index, rawClip ->
                     val clipNum = index + 1
                     _processingStatus.value = ProcessingPipelineStatus.Processing(
                         "ML Kit face-aligning & rendering clip $clipNum of $totalClips...",
@@ -354,13 +459,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
 
                     val (videoPath, thumbPath) = videoProcessor.render1to1ClipWithHookOverlay(
-                        videoFile,
-                        rawClip
+                        sourceVideoFile = videoFile,
+                        clip = rawClip,
+                        showHookBanner = _showHookBanner.value,
+                        showSubtitlesBanner = _showSubtitlesBanner.value
                     ) { clipProgress ->
                     }
 
                     val clipObj = ViralClip(
                         id = "clip_${UUID.randomUUID().toString().take(6)}",
+                        projectId = projectId,
                         startTimeSeconds = rawClip.start_time,
                         endTimeSeconds = rawClip.end_time,
                         confidenceScore = rawClip.confidence_score,
@@ -374,16 +482,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         subtitles = rawClip.subtitles,
                         isCompliant = true,
                         complianceDetails = "Compliant with campaign rules",
-                        aspectRatio = _aspectRatio.value
+                        aspectRatio = _aspectRatio.value,
+                        showHookBanner = _showHookBanner.value,
+                        showSubtitlesBanner = _showSubtitlesBanner.value
                     )
                     generatedViralClips.add(clipObj)
                 }
 
+                // Create Project Folder in Room DB
+                val projectEntity = com.example.data.db.ProjectEntity(
+                    id = projectId,
+                    name = "Session: ${videoName.take(20)}",
+                    videoFileName = videoName,
+                    clipCount = generatedViralClips.size,
+                    thumbnailPath = generatedViralClips.firstOrNull()?.thumbnailPath
+                )
+                clipDao.insertProject(projectEntity)
+
+                _currentProjectId.value = projectId
                 _clips.value = generatedViralClips
                 _processingStatus.value = ProcessingPipelineStatus.Success(generatedViralClips)
 
-                // Persist clips to Room DB for progress persistence
-                saveClipsToRoom(generatedViralClips)
+                // Save clips under this project
+                saveClipsToRoom(generatedViralClips, projectId)
+                loadProjects()
+
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error rendering approved clips", e)
+                _processingStatus.value = ProcessingPipelineStatus.Error(e.localizedMessage ?: "Rendering error occurred.")
+            }
+        }
+    }
 
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Clip generation pipeline error", e)
@@ -503,10 +632,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun saveClipsToRoom(clipsList: List<ViralClip>) {
+    private fun entityToViralClip(entity: ClipEntity): ViralClip {
+        return ViralClip(
+            id = entity.id,
+            projectId = entity.projectId,
+            startTimeSeconds = entity.startTimeSeconds,
+            endTimeSeconds = entity.endTimeSeconds,
+            confidenceScore = entity.confidenceScore,
+            suggestedHookText = entity.suggestedHookText,
+            reason = entity.reason,
+            title = entity.title,
+            description = entity.description,
+            tags = entity.tagsCsv.split(",").map { it.trim() }.filter { it.isNotBlank() },
+            processedVideoPath = entity.processedVideoPath,
+            thumbnailPath = entity.thumbnailPath,
+            manualCropOffset = entity.cropOffset,
+            subtitles = parseSubtitlesJson(entity.subtitlesJson),
+            isCompliant = entity.isCompliant,
+            complianceDetails = entity.complianceNote,
+            showTitle = entity.showTitle,
+            showDescription = entity.showDescription,
+            showTags = entity.showTags,
+            isExported = entity.isExported
+        )
+    }
+
+    private suspend fun saveClipsToRoom(clipsList: List<ViralClip>, projectId: String = "default_project") {
         val entities = clipsList.map { clip ->
             ClipEntity(
                 id = clip.id,
+                projectId = projectId,
                 startTimeSeconds = clip.startTimeSeconds,
                 endTimeSeconds = clip.endTimeSeconds,
                 confidenceScore = clip.confidenceScore,
@@ -533,6 +688,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun saveClipToRoom(clip: ViralClip) {
         val entity = ClipEntity(
             id = clip.id,
+            projectId = clip.projectId,
             startTimeSeconds = clip.startTimeSeconds,
             endTimeSeconds = clip.endTimeSeconds,
             confidenceScore = clip.confidenceScore,

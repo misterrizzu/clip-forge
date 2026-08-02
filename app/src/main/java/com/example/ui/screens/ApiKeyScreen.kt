@@ -33,12 +33,14 @@ import com.example.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ApiKeyScreen(
+    viewModel: MainViewModel,
     currentApiKey: String,
     onSaveKey: (String) -> Boolean,
     onContinue: () -> Unit
 ) {
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val enablePreRenderReview by viewModel.enablePreRenderReview.collectAsState()
 
     var keyInput by remember { mutableStateOf(currentApiKey) }
     var isPasswordVisible by remember { mutableStateOf(false) }
@@ -48,7 +50,7 @@ fun ApiKeyScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(MaterialTheme.colorScheme.background)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -56,23 +58,23 @@ fun ApiKeyScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(DarkSurface)
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             // Header Icon Badge
             Box(
                 modifier = Modifier
                     .size(68.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(NeonOrange.copy(alpha = 0.15f)),
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Key,
                     contentDescription = "API Key",
-                    tint = NeonOrange,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -83,14 +85,14 @@ fun ApiKeyScreen(
                     text = "Welcome to ClipForge",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Enter your Gemini or Vertex AI Key to power AI viral clip extraction.",
+                    text = "Configure your Gemini API key and app settings.",
                     fontSize = 14.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
             }
@@ -103,7 +105,7 @@ fun ApiKeyScreen(
                     errorMessage = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Paste your Gemini or Vertex AI API Key") },
+                label = { Text("Paste your Gemini API Key") },
                 placeholder = { Text("AIzaSy...") },
                 singleLine = true,
                 visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -112,20 +114,10 @@ fun ApiKeyScreen(
                         Icon(
                             imageVector = Icons.Default.Key,
                             contentDescription = "Toggle visibility",
-                            tint = TextMuted
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = NeonOrange,
-                    unfocusedBorderColor = DarkCardBorder,
-                    focusedLabelColor = NeonOrange,
-                    unfocusedLabelColor = TextMuted,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedContainerColor = DarkSurfaceVariant,
-                    unfocusedContainerColor = DarkSurfaceVariant
-                ),
                 shape = RoundedCornerShape(14.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() })
@@ -134,9 +126,36 @@ fun ApiKeyScreen(
             if (errorMessage != null) {
                 Text(
                     text = errorMessage!!,
-                    color = ErrorRed,
+                    color = MaterialTheme.colorScheme.error,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
+                )
+            }
+
+            Divider(color = MaterialTheme.colorScheme.outline)
+
+            // Setting Toggle: Pre-Render Candidate Clip Review
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Pre-Render Clip Approval Step",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Select/approve clips before video rendering starts",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = enablePreRenderReview,
+                    onCheckedChange = { viewModel.setEnablePreRenderReview(it) }
                 )
             }
 
@@ -150,17 +169,15 @@ fun ApiKeyScreen(
                     context.startActivity(intent)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ElectricViolet)
+                shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.OpenInNew,
                     contentDescription = null,
-                    tint = ElectricViolet,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Get API Key (Google AI Studio)", color = ElectricViolet, fontWeight = FontWeight.SemiBold)
+                Text(text = "Get API Key (Google AI Studio)", fontWeight = FontWeight.SemiBold)
             }
 
             // Button 2: Save & Continue
@@ -182,7 +199,6 @@ fun ApiKeyScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Row(
@@ -192,13 +208,11 @@ fun ApiKeyScreen(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = Color.Black,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Save & Continue",
-                        color = Color.Black,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -214,14 +228,14 @@ fun ApiKeyScreen(
                 Icon(
                     imageVector = Icons.Default.Security,
                     contentDescription = "Encrypted",
-                    tint = TextMuted,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "Stored securely on-device using EncryptedSharedPreferences",
                     fontSize = 11.sp,
-                    color = TextMuted
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

@@ -197,6 +197,8 @@ class VideoProcessor(private val context: Context) {
         sourceVideoFile: File,
         clip: RawGeminiClip,
         manualCropOffset: Float = 0f,
+        showHookBanner: Boolean = true,
+        showSubtitlesBanner: Boolean = true,
         onProgress: (Float) -> Unit
     ): Pair<String, String?> = withContext(Dispatchers.IO) {
         val clipId = UUID.randomUUID().toString().take(8)
@@ -276,7 +278,14 @@ class VideoProcessor(private val context: Context) {
         }
 
         // Generate Thumbnail Image with Hook Text + Burned Spoken Subtitle Overlay
-        val thumbPath = generateThumbnail(outputFile, clip.suggested_hook_text, clip.subtitles, thumbFile)
+        val thumbPath = generateThumbnail(
+            outputFile,
+            clip.suggested_hook_text,
+            clip.subtitles,
+            thumbFile,
+            showHookBanner = showHookBanner,
+            showSubtitlesBanner = showSubtitlesBanner
+        )
 
         return@withContext Pair(outputFile.absolutePath, thumbPath)
     }
@@ -403,7 +412,9 @@ class VideoProcessor(private val context: Context) {
         hookText: String,
         subtitles: List<SubtitleItem>,
         thumbFile: File,
-        aspectRatio: AspectRatio = AspectRatio.ASPECT_9_16
+        aspectRatio: AspectRatio = AspectRatio.ASPECT_9_16,
+        showHookBanner: Boolean = true,
+        showSubtitlesBanner: Boolean = true
     ): String? {
         val retriever = MediaMetadataRetriever()
         return try {
@@ -446,54 +457,59 @@ class VideoProcessor(private val context: Context) {
                     canvas.drawBitmap(croppedSrc, null, dstRect, null)
                 }
 
-                // Top Hook Text Banner
-                val bannerPaint = Paint().apply {
-                    color = Color.parseColor("#E6000000") // 90% black
-                    style = Paint.Style.FILL
-                }
-                val bannerHeight = (targetH * 0.16f)
-                canvas.drawRect(0f, 0f, targetW.toFloat(), bannerHeight, bannerPaint)
-
-                val borderPaint = Paint().apply {
-                    color = Color.parseColor("#FF6C00")
-                    strokeWidth = 8f
-                }
-                canvas.drawLine(0f, bannerHeight, targetW.toFloat(), bannerHeight, borderPaint)
-
-                val textPaint = Paint().apply {
-                    color = Color.WHITE
-                    textSize = targetW * 0.048f
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    textAlign = Paint.Align.CENTER
-                    isAntiAlias = true
-                }
-
-                val text = if (hookText.isNotBlank()) hookText else "VIRAL MOMENT 🔥"
-                val textX = targetW / 2f
-                val textY = bannerHeight / 2f + (textPaint.textSize / 3f)
-
-                canvas.drawText(text, textX, textY, textPaint)
-
-                // Bottom Spoken Subtitle Burn-In Banner
-                val subText = subtitles.firstOrNull()?.text ?: "Watch until the end! 🔥"
-                if (subText.isNotBlank()) {
-                    val subBgPaint = Paint().apply {
-                        color = Color.parseColor("#CC000000")
+                // Top Hook Text Banner (Conditionally rendered)
+                if (showHookBanner) {
+                    val bannerPaint = Paint().apply {
+                        color = Color.parseColor("#E6000000") // 90% black
                         style = Paint.Style.FILL
                     }
-                    val subBannerY = targetH * 0.80f
-                    val subBannerHeight = targetH * 0.15f
-                    canvas.drawRect(0f, subBannerY, targetW.toFloat(), subBannerY + subBannerHeight, subBgPaint)
+                    val bannerHeight = (targetH * 0.16f)
+                    canvas.drawRect(0f, 0f, targetW.toFloat(), bannerHeight, bannerPaint)
 
-                    val subPaint = Paint().apply {
-                        color = Color.YELLOW
-                        textSize = targetW * 0.045f
+                    val borderPaint = Paint().apply {
+                        color = Color.parseColor("#FF6C00")
+                        strokeWidth = 8f
+                    }
+                    canvas.drawLine(0f, bannerHeight, targetW.toFloat(), bannerHeight, borderPaint)
+
+                    val textPaint = Paint().apply {
+                        color = Color.WHITE
+                        textSize = targetW * 0.048f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                         isAntiAlias = true
                     }
-                    val subY = subBannerY + (subBannerHeight / 2f) + (subPaint.textSize / 3f)
-                    canvas.drawText("💬 \"$subText\"", textX, subY, subPaint)
+
+                    val text = if (hookText.isNotBlank()) hookText else "VIRAL MOMENT 🔥"
+                    val textX = targetW / 2f
+                    val textY = bannerHeight / 2f + (textPaint.textSize / 3f)
+
+                    canvas.drawText(text, textX, textY, textPaint)
+                }
+
+                // Bottom Spoken Subtitle Burn-In Banner (Conditionally rendered)
+                if (showSubtitlesBanner) {
+                    val subText = subtitles.firstOrNull()?.text ?: "Watch until the end! 🔥"
+                    if (subText.isNotBlank()) {
+                        val subBgPaint = Paint().apply {
+                            color = Color.parseColor("#CC000000")
+                            style = Paint.Style.FILL
+                        }
+                        val subBannerY = targetH * 0.80f
+                        val subBannerHeight = targetH * 0.15f
+                        canvas.drawRect(0f, subBannerY, targetW.toFloat(), subBannerY + subBannerHeight, subBgPaint)
+
+                        val subPaint = Paint().apply {
+                            color = Color.YELLOW
+                            textSize = targetW * 0.045f
+                            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                            textAlign = Paint.Align.CENTER
+                            isAntiAlias = true
+                        }
+                        val subY = subBannerY + (subBannerHeight / 2f) + (subPaint.textSize / 3f)
+                        val textX = targetW / 2f
+                        canvas.drawText("💬 \"$subText\"", textX, subY, subPaint)
+                    }
                 }
 
                 FileOutputStream(thumbFile).use { out ->

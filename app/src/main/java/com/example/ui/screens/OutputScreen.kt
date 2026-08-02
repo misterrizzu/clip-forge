@@ -48,34 +48,44 @@ fun OutputScreen(
                             text = "Generated Viral Clips",
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
-                            color = TextPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "${clips.size} clips extracted & rendered",
+                            text = "${clips.size} clips ready",
                             fontSize = 12.sp,
-                            color = NeonOrange
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackToInput) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            viewModel.startNewSession()
+                            onBackToInput()
+                        }
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "New Video Session", tint = MaterialTheme.colorScheme.primary)
+                    }
+
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = TextSecondary)
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (clips.isNotEmpty()) {
                 Surface(
-                    color = DarkSurface,
+                    color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 8.dp,
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
+                    border = CardDefaults.outlinedCardBorder()
                 ) {
                     Box(
                         modifier = Modifier

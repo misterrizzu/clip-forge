@@ -8,6 +8,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -16,10 +17,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.MainViewModel
 import com.example.ui.screens.ApiKeyScreen
+import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.OutputScreen
 import com.example.ui.screens.VideoInputScreen
 import com.example.ui.theme.ClipForgeTheme
-import com.example.ui.theme.DarkBackground
 
 class MainActivity : ComponentActivity() {
 
@@ -30,7 +31,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            ClipForgeTheme {
+            val isDarkMode by viewModel.isDarkMode.collectAsState()
+
+            ClipForgeTheme(isDarkTheme = isDarkMode) {
                 val navController = rememberNavController()
                 val apiKey by viewModel.apiKey.collectAsState()
 
@@ -39,7 +42,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(DarkBackground)
+                        .background(MaterialTheme.colorScheme.background)
                 ) { innerPadding ->
                     NavHost(
                         navController = navController,
@@ -48,6 +51,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         composable("apikey_setup") {
                             ApiKeyScreen(
+                                viewModel = viewModel,
                                 currentApiKey = apiKey,
                                 onSaveKey = { newKey ->
                                     viewModel.updateApiKey(newKey)
@@ -66,7 +70,20 @@ class MainActivity : ComponentActivity() {
                                 onOpenSettings = {
                                     navController.navigate("apikey_setup")
                                 },
+                                onOpenHistory = {
+                                    navController.navigate("history")
+                                },
                                 onGenerationComplete = {
+                                    navController.navigate("output")
+                                }
+                            )
+                        }
+
+                        composable("history") {
+                            HistoryScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onOpenProject = {
                                     navController.navigate("output")
                                 }
                             )

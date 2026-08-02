@@ -29,6 +29,15 @@ data class RawGeminiClip(
     val subtitles: List<SubtitleItem> = emptyList()
 )
 
+data class ProjectFolder(
+    val id: String,
+    val name: String,
+    val videoFileName: String,
+    val clipCount: Int,
+    val thumbnailPath: String?,
+    val createdAtMs: Long
+)
+
 enum class AspectRatio(val label: String, val ratioWidth: Int, val ratioHeight: Int) {
     ASPECT_9_16("9:16 Vertical (Shorts/Reels)", 9, 16),
     ASPECT_1_1("1:1 Square", 1, 1)
@@ -36,6 +45,7 @@ enum class AspectRatio(val label: String, val ratioWidth: Int, val ratioHeight: 
 
 data class ViralClip(
     val id: String,
+    val projectId: String = "default_project",
     val startTimeSeconds: Float,
     val endTimeSeconds: Float,
     val confidenceScore: Float,
@@ -54,7 +64,9 @@ data class ViralClip(
     var showDescription: Boolean = true,
     var showTags: Boolean = true,
     var isExported: Boolean = false,
-    var aspectRatio: AspectRatio = AspectRatio.ASPECT_9_16
+    var aspectRatio: AspectRatio = AspectRatio.ASPECT_9_16,
+    var showHookBanner: Boolean = true,
+    var showSubtitlesBanner: Boolean = true
 ) {
     val durationSeconds: Int
         get() = (endTimeSeconds - startTimeSeconds).toInt().coerceAtLeast(1)
@@ -92,6 +104,7 @@ enum class QueueStatus {
 sealed class ProcessingPipelineStatus {
     object Idle : ProcessingPipelineStatus()
     data class Processing(val stepText: String, val progressFraction: Float) : ProcessingPipelineStatus()
+    data class ReviewCandidateClips(val candidates: List<RawGeminiClip>, val videoFile: java.io.File) : ProcessingPipelineStatus()
     data class Success(val clips: List<ViralClip>) : ProcessingPipelineStatus()
     data class Error(val message: String) : ProcessingPipelineStatus()
 }

@@ -35,6 +35,7 @@ import com.example.ui.theme.*
 fun VideoInputScreen(
     viewModel: MainViewModel,
     onOpenSettings: () -> Unit,
+    onOpenHistory: () -> Unit,
     onGenerationComplete: () -> Unit
 ) {
     val context = LocalContext.current
@@ -48,6 +49,9 @@ fun VideoInputScreen(
     val customInstructions by viewModel.customInstructions.collectAsState()
     val processingStatus by viewModel.processingStatus.collectAsState()
     val batchQueue by viewModel.batchQueue.collectAsState()
+    val isDarkMode by viewModel.isDarkMode.collectAsState()
+    val showHookBanner by viewModel.showHookBanner.collectAsState()
+    val showSubtitlesBanner by viewModel.showSubtitlesBanner.collectAsState()
 
     // File pickers
     val videoPickerLauncher = rememberLauncherForActivityResult(
@@ -91,42 +95,39 @@ fun VideoInputScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "ClipForge",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = NeonOrange
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(ElectricViolet)
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "100% REAL AI",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
+                    Text(
+                        text = "ClipForge",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 },
                 actions = {
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = "Project History Folders"
+                        )
+                    }
+
+                    IconButton(onClick = { viewModel.toggleTheme() }) {
+                        Icon(
+                            imageVector = if (isDarkMode) Icons.Default.WbSunny else Icons.Default.NightsStay,
+                            contentDescription = "Toggle Theme"
+                        )
+                    }
+
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "API Key Settings",
-                            tint = TextSecondary
+                            contentDescription = "Settings"
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = DarkBackground
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -387,41 +388,98 @@ fun VideoInputScreen(
                             }
                         }
 
-                        Divider(color = DarkCardBorder)
+                        Divider(color = MaterialTheme.colorScheme.outline)
 
                         val minDur by viewModel.minDurationSeconds.collectAsState()
                         val maxDur by viewModel.maxDurationSeconds.collectAsState()
+                        var sliderPosition by remember(minDur, maxDur) { mutableStateOf(minDur.toFloat()..maxDur.toFloat()) }
+
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Clip Length Range (Drag Min & Max):",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${sliderPosition.start.toInt()}s — ${sliderPosition.endInclusive.toInt()}s",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            RangeSlider(
+                                value = sliderPosition,
+                                onValueChange = { range ->
+                                    sliderPosition = range
+                                    viewModel.setClipDurationRange(range.start.toInt(), range.endInclusive.toInt())
+                                },
+                                valueRange = 10f..120f,
+                                steps = 21,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Divider(color = MaterialTheme.colorScheme.outline)
+
+                        Text(
+                            text = "9:16 Canvas Overlays:",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Target Clip Length:",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TextSecondary
-                            )
-                            Text(
-                                text = "${minDur}s - ${maxDur}s",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = NeonOrange
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Top Hook Text Banner",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Show AI hook text banner on top empty space",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = showHookBanner,
+                                onCheckedChange = { viewModel.setShowHookBanner(it) }
                             )
                         }
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            listOf(15, 30, 45, 60).forEach { dur ->
-                                FilterChip(
-                                    selected = maxDur == dur,
-                                    onClick = { viewModel.setClipDurationRange(15, dur) },
-                                    label = { Text("${dur}s Max", fontSize = 11.sp) }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Bottom Subtitles Banner",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Burn in spoken dialogue subtitles on bottom space",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            Switch(
+                                checked = showSubtitlesBanner,
+                                onCheckedChange = { viewModel.setShowSubtitlesBanner(it) }
+                            )
                         }
                     }
                 }
@@ -624,8 +682,19 @@ fun VideoInputScreen(
                                 trackColor = DarkSurfaceVariant
                             )
                         }
+            // Pre-Render Clip Selection Dialog
+            if (processingStatus is ProcessingPipelineStatus.ReviewCandidateClips) {
+                val reviewStatus = processingStatus as ProcessingPipelineStatus.ReviewCandidateClips
+                ClipSelectionDialog(
+                    candidateClips = reviewStatus.candidates,
+                    videoFile = reviewStatus.videoFile,
+                    onConfirmSelection = { approvedClips ->
+                        viewModel.confirmAndRenderSelectedClips(approvedClips, reviewStatus.videoFile)
+                    },
+                    onDismiss = {
+                        viewModel.resetProcessingStatus()
                     }
-                }
+                )
             }
         }
     }
