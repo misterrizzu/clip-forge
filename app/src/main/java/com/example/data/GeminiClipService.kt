@@ -12,6 +12,16 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
+data class ParsedCampaignRules(
+    val requiredCaptionText: String = "",
+    val requiredHandles: List<String> = emptyList(),
+    val requiredHashtags: List<String> = emptyList(),
+    val platformRules: String = "",
+    val minClipDuration: Int? = null,
+    val maxClipDuration: Int? = null,
+    val brandingRules: String = ""
+)
+
 class GeminiClipService {
 
     private val okHttpClient = OkHttpClient.Builder()
@@ -19,6 +29,52 @@ class GeminiClipService {
         .readTimeout(90, TimeUnit.SECONDS)
         .writeTimeout(90, TimeUnit.SECONDS)
         .build()
+
+    /**
+     * Step 1: Extract structured fields from rules file text before analyzing clips.
+     */
+    fun parseCampaignRules(rulesText: String): ParsedCampaignRules {
+        if (rulesText.isBlank()) return ParsedCampaignRules()
+
+        val rawHandles = mutableListOf<String>()
+        val handleMatcher = Pattern.compile("@[a-zA-Z0-9_]{4,30}").matcher(rulesText)
+        while (handleMatcher.find()) {
+            val handle = handleMatcher.group()
+            if (isValidSocialHandle(handle)) {
+                rawHandles.add(handle)
+            }
+        }
+
+        val rawHashtags = mutableListOf<String>()
+        val hashtagMatcher = Pattern.compile("#[a-zA-Z0-9_]{2,40}").matcher(rulesText)
+        while (hashtagMatcher.find()) {
+            rawHashtags.add(hashtagMatcher.group())
+        }
+
+        // Extract REQUIRED_CAPTION_TEXT if explicitly quoted or indicated
+        var captionText = ""
+        val captionLine = rulesText.lines().firstOrNull {
+            it.contains("caption", ignoreCase = true) || it.contains("required text", ignoreCase = true) || it.contains("must include", ignoreCase = true)
+        }
+        if (captionLine != null) {
+            captionText = captionLine.replace(Regex("(?i)^(required text|caption|must include)[:\\s]*"), "").trim()
+        }
+
+        return ParsedCampaignRules(
+            requiredCaptionText = captionText,
+            requiredHandles = rawHandles.distinct(),
+            requiredHashtags = rawHashtags.distinct(),
+            platformRules = extractMatchingSection(rulesText, listOf("platform", "posting", "tiktok", "reels", "youtube")),
+            brandingRules = extractMatchingSection(rulesText, listOf("brand", "logo", "watermark", "overlay"))
+        )
+    }
+
+    private fun extractMatchingSection(text: String, keywords: List<String>): String {
+        return text.lines()
+            .filter { line -> keywords.any { kw -> line.contains(kw, ignoreCase = true) } }
+            .joinToString("\n")
+            .take(500)
+    }
 
     suspend fun analyzeVideoForViralClips(
         apiKey: String,
@@ -34,38 +90,72 @@ class GeminiClipService {
             throw Exception("Invalid Gemini API Key. Please configure a valid API key in Settings.")
         }
 
+        // Step 1: Pre-parse campaign rules file locally
+        val campaignRules = parseCampaignRules(campaignRulesText)
+
+        val effectiveMinDuration = campaignRules.minClipDuration ?: minDurationSeconds
+        val effectiveMaxDuration = campaignRules.maxClipDuration ?: maxDurationSeconds
+
         val systemPrompt = """
-            You are an expert viral video editor and content strategist. 
-            Analyze video transcriptions, campaign rules, and custom instructions to find ALL high-engagement, viral clips.
-            Video total duration is: $videoDurationSeconds seconds.
-            Each clip MUST be strictly between $minDurationSeconds and $maxDurationSeconds seconds long and within 0.0 and $videoDurationSeconds seconds.
-            Return a JSON object containing an array "clips" with objects having fields:
-            - "start_time": float seconds (e.g. 15.0)
-            - "end_time": float seconds (e.g. 45.0)
-            - "confidence_score": float between 0.50 and 0.99
-            - "suggested_hook_text": short punchy text overlay (e.g., "Wait till you hear this! 😱")
-            - "reason": concise explanation of why this clip is viral
-            - "suggested_title": viral social media title for TikTok/Reels/Shorts
-            - "suggested_description": engaging caption with call to action
-            - "suggested_tags": array of 3-5 trending hashtags
-            - "subtitles": array of 3-8 spoken phrase subtitle objects: [{"start_sec": float, "end_sec": float, "text": string}]
+            You are an expert viral video editor and content strategist.
+            Analyze the provided video transcript and speech audio to find high-engagement, viral clips.
+
+            CRITICAL DIRECTIVES:
+            1. CLIP SELECTION & DURATIONS:
+               - Video total duration: $videoDurationSeconds seconds.
+               - Each clip MUST be strictly between $effectiveMinDuration and $effectiveMaxDuration seconds.
+               - Timestamps MUST be within 0.0 and $videoDurationSeconds seconds.
+
+            2. CONTENT GROUNDING (STRICT RULE):
+               - "suggested_hook_text", "suggested_title", and clip captions MUST come directly from what the speaker ACTUALLY SAYS in that specific clip transcript.
+               - NEVER invent topics or subjects from outside the specific clip dialogue.
+               - DO NOT output spammy, random, or auto-generated @handles.
+
+            3. CAMPAIGN RULES & METADATA FORMAT:
+               - "suggested_description" (caption): MUST contain the hook text followed by the exact REQUIRED_CAPTION_TEXT from rules (if any): "${campaignRules.requiredCaptionText}".
+               - "suggested_tags": Include ONLY real, explicitly named @handles from rules: ${campaignRules.requiredHandles.joinToString(", ")}. IF NO HANDLES WERE SPECIFIED IN RULES, RETURN AN EMPTY ARRAY. DO NOT GENERATE @HANDLES.
+               - "hashtags": 3-5 real topic hashtags based strictly on what the speaker says in this clip.
+
+            Return JSON matching this EXACT structure:
+            {
+              "clips": [
+                {
+                  "start_time": float,
+                  "end_time": float,
+                  "confidence_score": float (0.50 - 0.99),
+                  "suggested_hook_text": "Exact hook line spoken in clip",
+                  "suggested_title": "Descriptive title based on what speaker says in clip",
+                  "suggested_description": "Hook line + campaign required caption text",
+                  "suggested_tags": ["@real_handle_from_rules_only"],
+                  "hashtags": ["#Topic1", "#Topic2", "#Topic3"],
+                  "reason": "Why this moment is high engagement",
+                  "subtitles": [{"start_sec": float, "end_sec": float, "text": "spoken words"}]
+                }
+              ]
+            }
         """.trimIndent()
 
         val userPrompt = StringBuilder().apply {
-            appendLine("=== VIDEO METADATA & CONTENT ===")
-            appendLine("Video Duration: ${videoDurationSeconds}s")
+            appendLine("=== VIDEO TRANSCRIPT & AUDIO METADATA ===")
+            appendLine("Total Duration: ${videoDurationSeconds}s")
             if (transcriptOrContent.isNotBlank()) {
-                appendLine("Transcript / Speech Context:\n${transcriptOrContent.take(12000)}")
+                appendLine("Actual Transcript / Speech Content:\n${transcriptOrContent.take(12000)}")
             }
+
             if (campaignRulesText.isNotBlank()) {
-                appendLine("\n=== CAMPAIGN RULES ===")
+                appendLine("\n=== CAMPAIGN RULES DOCUMENT ===")
                 appendLine(campaignRulesText.take(3000))
+                if (campaignRules.requiredHandles.isNotEmpty()) {
+                    appendLine("Allowed @handles: ${campaignRules.requiredHandles.joinToString(", ")}")
+                }
             }
+
             if (customInstructions.isNotBlank()) {
-                appendLine("\n=== CUSTOM USER INSTRUCTIONS ===")
+                appendLine("\n=== USER CUSTOM INSTRUCTIONS ===")
                 appendLine(customInstructions)
             }
-            appendLine("\nIdentify ALL valid viral moments with spoken subtitle lines. Output JSON matching the specified schema.")
+
+            appendLine("\nIdentify all viral clip segments matching duration requirements. Ground all text in actual clip speech.")
         }.toString()
 
         val partsArray = JSONArray()
@@ -95,7 +185,7 @@ class GeminiClipService {
             })
             put("generationConfig", JSONObject().apply {
                 put("responseMimeType", "application/json")
-                put("temperature", 0.4)
+                put("temperature", 0.3)
             })
         }
 
@@ -121,7 +211,7 @@ class GeminiClipService {
             if (parts != null && parts.length() > 0) {
                 val rawOutput = parts.getJSONObject(0).optString("text", "")
                 if (rawOutput.isNotBlank()) {
-                    val parsedClips = parseRawClipsJson(rawOutput, videoDurationSeconds, campaignRulesText)
+                    val parsedClips = parseRawClipsJson(rawOutput, videoDurationSeconds, campaignRules)
                     if (parsedClips.isNotEmpty()) {
                         return@withContext parsedClips
                     }
@@ -129,7 +219,7 @@ class GeminiClipService {
             }
         }
 
-        throw Exception("Gemini returned no viral clips for this video. Try adjusting custom instructions or using a longer video with spoken dialogue.")
+        throw Exception("Gemini returned no viral clips for this video. Try adjusting custom instructions or using a video with clearer spoken dialogue.")
     }
 
     private fun parseErrorMessage(responseText: String): String {
@@ -145,10 +235,9 @@ class GeminiClipService {
     private fun parseRawClipsJson(
         rawJsonText: String,
         maxDurationSeconds: Float,
-        campaignRulesText: String
+        campaignRules: ParsedCampaignRules
     ): List<RawGeminiClip> {
         val resultList = mutableListOf<RawGeminiClip>()
-        val requiredHandlesAndTags = extractCampaignRequirements(campaignRulesText)
 
         try {
             val rootObj = JSONObject(rawJsonText)
@@ -159,25 +248,62 @@ class GeminiClipService {
                 var endTime = clipObj.optDouble("end_time", 30.0).toFloat()
 
                 if (maxDurationSeconds > 0) {
-                    startTime = startTime.coerceIn(0f, maxDurationSeconds - 5f)
+                    startTime = startTime.coerceIn(0f, (maxDurationSeconds - 5f).coerceAtLeast(0f))
                     endTime = endTime.coerceIn(startTime + 5f, maxDurationSeconds)
                 }
 
                 val confidence = clipObj.optDouble("confidence_score", 0.90).toFloat()
-                val hookText = clipObj.optString("suggested_hook_text", "Wait till you hear this! 🔥")
-                val reason = clipObj.optString("reason", "High emotional peak and engagement moment.")
-                var title = clipObj.optString("suggested_title", "Viral Highlight #${i + 1}")
-                var desc = clipObj.optString("suggested_description", "Check out this key moment!")
+                val hookText = clipObj.optString("suggested_hook_text", "Key Highlight 🔥")
+                val reason = clipObj.optString("reason", "Spoken highlight from clip.")
+                val title = clipObj.optString("suggested_title", "Viral Clip #${i + 1}")
+                var desc = clipObj.optString("suggested_description", hookText)
 
-                val tagsList = mutableListOf<String>()
-                val tagsArr = clipObj.optJSONArray("suggested_tags")
-                if (tagsArr != null) {
-                    for (t in 0 until tagsArr.length()) {
-                        tagsList.add(tagsArr.getString(t))
+                // Enforce required caption text if specified in rules
+                if (campaignRules.requiredCaptionText.isNotBlank() && !desc.contains(campaignRules.requiredCaptionText, ignoreCase = true)) {
+                    desc = "$desc\n\n${campaignRules.requiredCaptionText}"
+                }
+
+                // Process & Validate Handles (Strict filter: real handles only, >= 4 chars)
+                val rawTagsArr = clipObj.optJSONArray("suggested_tags")
+                val validatedHandles = mutableListOf<String>()
+
+                if (rawTagsArr != null) {
+                    for (t in 0 until rawTagsArr.length()) {
+                        val handle = rawTagsArr.getString(t).trim()
+                        if (isValidSocialHandle(handle)) {
+                            validatedHandles.add(handle)
+                        }
                     }
                 }
 
-                // Parse Spoken Subtitles
+                // Append explicitly required handles from campaign rules if missing
+                campaignRules.requiredHandles.forEach { ruleHandle ->
+                    if (isValidSocialHandle(ruleHandle) && !validatedHandles.any { it.equals(ruleHandle, ignoreCase = true) }) {
+                        validatedHandles.add(ruleHandle)
+                    }
+                }
+
+                // Process Hashtags (Topic hashtags based on clip content)
+                val hashtagsList = mutableListOf<String>()
+                val rawHashtagsArr = clipObj.optJSONArray("hashtags")
+                if (rawHashtagsArr != null) {
+                    for (h in 0 until rawHashtagsArr.length()) {
+                        val tag = rawHashtagsArr.getString(h).trim()
+                        if (tag.startsWith("#") && tag.length >= 3) {
+                            hashtagsList.add(tag)
+                        }
+                    }
+                }
+
+                // Fallback to rules hashtags if empty
+                if (hashtagsList.isEmpty() && campaignRules.requiredHashtags.isNotEmpty()) {
+                    hashtagsList.addAll(campaignRules.requiredHashtags)
+                }
+
+                // Combine valid handles and hashtags into final tags list
+                val finalCombinedTags = (validatedHandles + hashtagsList).distinct()
+
+                // Parse Subtitles
                 val subtitlesList = mutableListOf<SubtitleItem>()
                 val subsArr = clipObj.optJSONArray("subtitles")
                 if (subsArr != null) {
@@ -192,22 +318,8 @@ class GeminiClipService {
                     }
                 }
 
-                // If no subtitles were returned, construct fallbacks based on hookText
                 if (subtitlesList.isEmpty()) {
-                    subtitlesList.add(SubtitleItem(startTime, startTime + 4.0f, hookText))
-                    subtitlesList.add(SubtitleItem(startTime + 4.0f, endTime, "Watch until the end! 🔥"))
-                }
-
-                // Enforce campaign compliance rules by auto-appending required handles and tags if missing
-                requiredHandlesAndTags.handles.forEach { handle ->
-                    if (!desc.contains(handle, ignoreCase = true)) {
-                        desc = "$desc\nTag: $handle"
-                    }
-                }
-                requiredHandlesAndTags.tags.forEach { tag ->
-                    if (!tagsList.any { it.equals(tag, ignoreCase = true) }) {
-                        tagsList.add(tag)
-                    }
+                    subtitlesList.add(SubtitleItem(startTime, (startTime + 4.0f).coerceAtMost(endTime), hookText))
                 }
 
                 resultList.add(
@@ -219,7 +331,7 @@ class GeminiClipService {
                         reason = reason,
                         suggested_title = title,
                         suggested_description = desc,
-                        suggested_tags = tagsList,
+                        suggested_tags = finalCombinedTags,
                         subtitles = subtitlesList
                     )
                 )
@@ -230,28 +342,28 @@ class GeminiClipService {
         return resultList
     }
 
-    private data class CampaignRequirements(
-        val handles: List<String>,
-        val tags: List<String>
-    )
+    /**
+     * Validates whether a handle string is a real social media handle and not spammy/random string.
+     * Criteria:
+     * - Must start with '@'
+     * - Total length (excluding @) must be >= 3 characters (handle length >= 4 including '@')
+     * - Must not look like purely random hex/hash strings (e.g. @a7f3k9p2)
+     */
+    private fun isValidSocialHandle(handle: String): Boolean {
+        if (!handle.startsWith("@")) return false
+        val cleanName = handle.removePrefix("@")
+        if (cleanName.length < 3 || cleanName.length > 30) return false
 
-    private fun extractCampaignRequirements(text: String): CampaignRequirements {
-        if (text.isBlank()) return CampaignRequirements(emptyList(), emptyList())
-        val handles = mutableListOf<String>()
-        val tags = mutableListOf<String>()
-
-        val handleMatcher = Pattern.compile("@[a-zA-Z0-9_.]+").matcher(text)
-        while (handleMatcher.find()) {
-            handles.add(handleMatcher.group())
+        // Check if string is random spammy alphanumeric noise (e.g., random hash with high digit density or keyboard mash)
+        val digitCount = cleanName.count { it.isDigit() }
+        if (cleanName.length > 6 && digitCount.toFloat() / cleanName.length > 0.6f) {
+            return false
         }
 
-        val tagMatcher = Pattern.compile("#[a-zA-Z0-9_]+").matcher(text)
-        while (tagMatcher.find()) {
-            tags.add(tagMatcher.group())
-        }
-
-        return CampaignRequirements(handles.distinct(), tags.distinct())
+        // Must match standard handle regex
+        return Pattern.matches("^[a-zA-Z0-9_.]{3,30}$", cleanName)
     }
 
     private fun String?.isNull_or_blank_safe(): Boolean = this == null || this.isBlank()
 }
+
