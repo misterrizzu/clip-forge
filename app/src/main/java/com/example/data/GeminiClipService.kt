@@ -26,7 +26,9 @@ class GeminiClipService {
         transcriptOrContent: String,
         campaignRulesText: String,
         customInstructions: String,
-        videoDurationSeconds: Float
+        videoDurationSeconds: Float,
+        minDurationSeconds: Int = 15,
+        maxDurationSeconds: Int = 60
     ): List<RawGeminiClip> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             throw Exception("Invalid Gemini API Key. Please configure a valid API key in Settings.")
@@ -36,7 +38,7 @@ class GeminiClipService {
             You are an expert viral video editor and content strategist. 
             Analyze video transcriptions, campaign rules, and custom instructions to find ALL high-engagement, viral clips.
             Video total duration is: $videoDurationSeconds seconds.
-            Each clip MUST be between 15 and 60 seconds long and within 0.0 and $videoDurationSeconds seconds.
+            Each clip MUST be strictly between $minDurationSeconds and $maxDurationSeconds seconds long and within 0.0 and $videoDurationSeconds seconds.
             Return a JSON object containing an array "clips" with objects having fields:
             - "start_time": float seconds (e.g. 15.0)
             - "end_time": float seconds (e.g. 45.0)

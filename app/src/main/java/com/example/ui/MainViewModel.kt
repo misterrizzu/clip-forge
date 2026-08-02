@@ -63,6 +63,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _customInstructions = MutableStateFlow("")
     val customInstructions: StateFlow<String> = _customInstructions.asStateFlow()
 
+    private val _aspectRatio = MutableStateFlow(AspectRatio.ASPECT_9_16)
+    val aspectRatio: StateFlow<AspectRatio> = _aspectRatio.asStateFlow()
+
+    private val _minDurationSeconds = MutableStateFlow(15)
+    val minDurationSeconds: StateFlow<Int> = _minDurationSeconds.asStateFlow()
+
+    private val _maxDurationSeconds = MutableStateFlow(60)
+    val maxDurationSeconds: StateFlow<Int> = _maxDurationSeconds.asStateFlow()
+
     private val _processingStatus = MutableStateFlow<ProcessingPipelineStatus>(ProcessingPipelineStatus.Idle)
     val processingStatus: StateFlow<ProcessingPipelineStatus> = _processingStatus.asStateFlow()
 
@@ -164,6 +173,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 Log.e("MainViewModel", "Error reading rules file", e)
                 _rulesFileContent.value = "Campaign Rules File: $fileName"
             }
+        }
+    }
+
+    fun setAspectRatio(ratio: AspectRatio) {
+        _aspectRatio.value = ratio
+    }
+
+    fun setClipDurationRange(minSec: Int, maxSec: Int) {
+        _minDurationSeconds.value = minSec
+        _maxDurationSeconds.value = maxSec
+    }
+
+    fun copyClipMetadataToClipboard(context: Context, clip: ViralClip) {
+        try {
+            val textToCopy = StringBuilder().apply {
+                if (clip.showTitle && clip.title.isNotBlank()) {
+                    appendLine("📌 ${clip.title}")
+                    appendLine()
+                }
+                if (clip.showDescription && clip.description.isNotBlank()) {
+                    appendLine(clip.description)
+                    appendLine()
+                }
+                if (clip.showTags && clip.tags.isNotEmpty()) {
+                    appendLine(clip.tags.joinToString(" "))
+                }
+            }.toString().trim()
+
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clipData = android.content.ClipData.newPlainText("Clip Metadata", textToCopy)
+            clipboard.setPrimaryClip(clipData)
+            Toast.makeText(context, "Caption & Tags copied to clipboard!", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e("MainViewModel", "Error copying to clipboard", e)
         }
     }
 
@@ -290,7 +333,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     transcriptOrContent = "Video File: ${videoFile.name}, Duration: ${videoDurationSec}s",
                     campaignRulesText = _rulesFileContent.value,
                     customInstructions = _customInstructions.value,
-                    videoDurationSeconds = videoDurationSec
+                    videoDurationSeconds = videoDurationSec,
+                    minDurationSeconds = _minDurationSeconds.value,
+                    maxDurationSeconds = _maxDurationSeconds.value
                 )
 
                 if (rawClips.isEmpty()) {
@@ -328,7 +373,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         thumbnailPath = thumbPath,
                         subtitles = rawClip.subtitles,
                         isCompliant = true,
-                        complianceDetails = "Compliant with campaign rules"
+                        complianceDetails = "Compliant with campaign rules",
+                        aspectRatio = _aspectRatio.value
                     )
                     generatedViralClips.add(clipObj)
                 }

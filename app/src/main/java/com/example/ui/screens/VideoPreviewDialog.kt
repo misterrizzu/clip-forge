@@ -89,7 +89,7 @@ fun VideoPreviewDialog(
                             maxLines = 1
                         )
                         Text(
-                            text = "1:1 Square Viral Clip (${clip.durationSeconds}s)",
+                            text = "${clip.aspectRatio.label} (${clip.durationSeconds}s)",
                             fontSize = 12.sp,
                             color = NeonOrange
                         )
@@ -99,11 +99,12 @@ fun VideoPreviewDialog(
                     }
                 }
 
-                // 1:1 Video Player View
+                // Video Player View Box
+                val playerAspectRatio = if (clip.aspectRatio == com.example.data.AspectRatio.ASPECT_9_16) (9f / 16f) else 1f
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
+                        .fillMaxWidth(if (clip.aspectRatio == com.example.data.AspectRatio.ASPECT_9_16) 0.75f else 1f)
+                        .aspectRatio(playerAspectRatio)
                         .clip(RoundedCornerShape(14.dp))
                         .background(Color.Black)
                 ) {

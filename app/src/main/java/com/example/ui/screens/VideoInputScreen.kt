@@ -342,7 +342,91 @@ fun VideoInputScreen(
                     }
                 }
 
-                // Section 3: Custom Instructions
+                // Section 3: Aspect Ratio & Duration Settings
+                Text(
+                    text = "Clip Output Settings",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                    shape = RoundedCornerShape(16.dp),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Text(
+                            text = "Target Aspect Ratio:",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondary
+                        )
+
+                        val currentRatio by viewModel.aspectRatio.collectAsState()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            com.example.data.AspectRatio.values().forEach { ratio ->
+                                val selected = ratio == currentRatio
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { viewModel.setAspectRatio(ratio) },
+                                    label = { Text(ratio.label, fontSize = 12.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = NeonOrange,
+                                        selectedLabelColor = Color.Black
+                                    )
+                                )
+                            }
+                        }
+
+                        Divider(color = DarkCardBorder)
+
+                        val minDur by viewModel.minDurationSeconds.collectAsState()
+                        val maxDur by viewModel.maxDurationSeconds.collectAsState()
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Target Clip Length:",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextSecondary
+                            )
+                            Text(
+                                text = "${minDur}s - ${maxDur}s",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NeonOrange
+                            )
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            listOf(15, 30, 45, 60).forEach { dur ->
+                                FilterChip(
+                                    selected = maxDur == dur,
+                                    onClick = { viewModel.setClipDurationRange(15, dur) },
+                                    label = { Text("${dur}s Max", fontSize = 11.sp) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Section 4: Custom Instructions
                 Text(
                     text = "Custom Instructions (Optional)",
                     fontSize = 16.sp,

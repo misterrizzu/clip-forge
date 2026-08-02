@@ -29,6 +29,11 @@ data class RawGeminiClip(
     val subtitles: List<SubtitleItem> = emptyList()
 )
 
+enum class AspectRatio(val label: String, val ratioWidth: Int, val ratioHeight: Int) {
+    ASPECT_9_16("9:16 Vertical (Shorts/Reels)", 9, 16),
+    ASPECT_1_1("1:1 Square", 1, 1)
+}
+
 data class ViralClip(
     val id: String,
     val startTimeSeconds: Float,
@@ -48,7 +53,8 @@ data class ViralClip(
     var showTitle: Boolean = true,
     var showDescription: Boolean = true,
     var showTags: Boolean = true,
-    var isExported: Boolean = false
+    var isExported: Boolean = false,
+    var aspectRatio: AspectRatio = AspectRatio.ASPECT_9_16
 ) {
     val durationSeconds: Int
         get() = (endTimeSeconds - startTimeSeconds).toInt().coerceAtLeast(1)

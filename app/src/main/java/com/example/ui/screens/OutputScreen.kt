@@ -144,6 +144,7 @@ fun OutputScreen(
                             clip = clip,
                             onPlayPreview = { viewModel.showPreviewModal(clip) },
                             onExport = { viewModel.exportClipToStorage(context, clip) },
+                            onCopyMetadata = { viewModel.copyClipMetadataToClipboard(context, clip) },
                             onToggleField = { field -> viewModel.toggleClipField(clip.id, field) },
                             onUpdateData = { title, desc, tags ->
                                 viewModel.updateClipData(clip.id, title, desc, tags)
@@ -175,6 +176,7 @@ fun ViralClipCard(
     clip: ViralClip,
     onPlayPreview: () -> Unit,
     onExport: () -> Unit,
+    onCopyMetadata: () -> Unit,
     onToggleField: (String) -> Unit,
     onUpdateData: (String, String, String) -> Unit,
     onUpdateManualCrop: (Float) -> Unit
@@ -452,30 +454,43 @@ fun ViralClipCard(
                 )
             }
 
-            // Card Action Buttons Row: Preview & Download
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            // Card Action Buttons Row: Preview, Copy Metadata & Download
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
-                    onClick = onPlayPreview,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+                    onClick = onCopyMetadata,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ElectricViolet)
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = NeonOrange)
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Preview", color = NeonOrange, fontWeight = FontWeight.Bold)
+                    Text("Copy Caption & Tags", color = ElectricViolet, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
-                Button(
-                    onClick = onExport,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
-                    shape = RoundedCornerShape(12.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Default.Download, contentDescription = null, tint = Color.Black)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Download", color = Color.Black, fontWeight = FontWeight.Bold)
+                    OutlinedButton(
+                        onClick = onPlayPreview,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = NeonOrange)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Preview", color = NeonOrange, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = onExport,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, tint = Color.Black)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Download", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

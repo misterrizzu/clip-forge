@@ -260,12 +260,19 @@ class VideoProcessor(private val context: Context) {
             val renderSuccess = renderWithTransformer(composition, outputFile, onProgress)
 
             if (!renderSuccess || !outputFile.exists() || outputFile.length() == 0L) {
-                Log.w("VideoProcessor", "Transformer export failed, fallback copying source")
-                sourceVideoFile.copyTo(outputFile, overwrite = true)
+                Log.w("VideoProcessor", "Transformer export failed, fallback trimming video with MediaMuxer")
+                val trimmed = trimVideoWithMediaMuxer(sourceVideoFile, outputFile, startMs, endMs)
+                if (!trimmed || !outputFile.exists() || outputFile.length() == 0L) {
+                    Log.e("VideoProcessor", "MediaMuxer trimming failed as well, copying source as last resort")
+                    sourceVideoFile.copyTo(outputFile, overwrite = true)
+                }
             }
         } catch (e: Exception) {
-            Log.e("VideoProcessor", "Error during Transformer rendering", e)
-            sourceVideoFile.copyTo(outputFile, overwrite = true)
+            Log.e("VideoProcessor", "Error during Transformer rendering, attempting MediaMuxer trimming", e)
+            val trimmed = trimVideoWithMediaMuxer(sourceVideoFile, outputFile, startMs, endMs)
+            if (!trimmed || !outputFile.exists() || outputFile.length() == 0L) {
+                sourceVideoFile.copyTo(outputFile, overwrite = true)
+            }
         }
 
         // Generate Thumbnail Image with Hook Text + Burned Spoken Subtitle Overlay
@@ -280,31 +287,114 @@ class VideoProcessor(private val context: Context) {
         composition: Composition,
         outputFile: File,
         onProgress: (Float) -> Unit
-    ): Boolean = suspendCancellableCoroutine { continuation ->
-        val transformer = Transformer.Builder(context)
-            .setVideoMimeType(MimeTypes.VIDEO_H264)
-            .addListener(object : Transformer.Listener {
-                override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-                    onProgress(1.0f)
-                    if (continuation.isActive) continuation.resume(true)
-                }
+    ): Boolean = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { continuation ->
+            val transformer = Transformer.Builder(context)
+                .setVideoMimeType(MimeTypes.VIDEO_H264)
+                .addListener(object : Transformer.Listener {
+                    override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                        onProgress(1.0f)
+                        if (continuation.isActive) continuation.resume(true)
+                    }
 
-                override fun onError(
-                    composition: Composition,
-                    exportResult: ExportResult,
-                    exportException: ExportException
-                ) {
-                    Log.e("VideoProcessor", "Transformer export error", exportException)
-                    if (continuation.isActive) continuation.resume(false)
-                }
-            })
-            .build()
+                    override fun onError(
+                        composition: Composition,
+                        exportResult: ExportResult,
+                        exportException: ExportException
+                    ) {
+                        Log.e("VideoProcessor", "Transformer export error", exportException)
+                        if (continuation.isActive) continuation.resume(false)
+                    }
+                })
+                .build()
 
+            try {
+                transformer.start(composition, outputFile.absolutePath)
+            } catch (e: Exception) {
+                Log.e("VideoProcessor", "Start transformer exception", e)
+                if (continuation.isActive) continuation.resume(false)
+            }
+        }
+    }
+
+    private suspend fun trimVideoWithMediaMuxer(
+        sourceVideoFile: File,
+        outputFile: File,
+        startMs: Long,
+        endMs: Long
+    ): Boolean = withContext(Dispatchers.IO) {
+        val extractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
         try {
-            transformer.start(composition, outputFile.absolutePath)
+            extractor.setDataSource(sourceVideoFile.absolutePath)
+            val trackCount = extractor.trackCount
+            muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+
+            val trackIndexMap = HashMap<Int, Int>()
+            val startUs = startMs * 1000L
+            val endUs = endMs * 1000L
+
+            var maxBufferSize = 1024 * 1024
+
+            for (i in 0 until trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith("video/") || mime.startsWith("audio/")) {
+                    extractor.selectTrack(i)
+                    val dstIndex = muxer.addTrack(format)
+                    trackIndexMap[i] = dstIndex
+                    if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                        val newSize = format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+                        if (newSize > maxBufferSize) {
+                            maxBufferSize = newSize
+                        }
+                    }
+                }
+            }
+
+            if (trackIndexMap.isEmpty()) {
+                Log.e("VideoProcessor", "No video/audio tracks found to trim")
+                return@withContext false
+            }
+
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+            muxer.start()
+
+            val buffer = ByteBuffer.allocate(maxBufferSize)
+            val bufferInfo = android.media.MediaCodec.BufferInfo()
+
+            while (true) {
+                val trackIndex = extractor.sampleTrackIndex
+                if (trackIndex < 0) break
+
+                val sampleTimeUs = extractor.sampleTime
+                if (sampleTimeUs > endUs) break
+
+                if (trackIndexMap.containsKey(trackIndex)) {
+                    bufferInfo.size = extractor.readSampleData(buffer, 0)
+                    if (bufferInfo.size < 0) break
+
+                    val adjustedTimeUs = (sampleTimeUs - startUs).coerceAtLeast(0L)
+                    bufferInfo.presentationTimeUs = adjustedTimeUs
+                    bufferInfo.flags = extractor.sampleFlags
+
+                    val dstTrack = trackIndexMap[trackIndex]!!
+                    muxer.writeSampleData(dstTrack, buffer, bufferInfo)
+                }
+                extractor.advance()
+            }
+
+            muxer.stop()
+            muxer.release()
+            muxer = null
+            extractor.release()
+            Log.d("VideoProcessor", "Successfully trimmed video with MediaMuxer to ${outputFile.length()} bytes")
+            true
         } catch (e: Exception) {
-            Log.e("VideoProcessor", "Start transformer exception", e)
-            if (continuation.isActive) continuation.resume(false)
+            Log.e("VideoProcessor", "MediaMuxer trimming failed", e)
+            try { muxer?.release() } catch (ignored: Throwable) {}
+            try { extractor.release() } catch (ignored: Throwable) {}
+            false
         }
     }
 
@@ -312,7 +402,8 @@ class VideoProcessor(private val context: Context) {
         videoFile: File,
         hookText: String,
         subtitles: List<SubtitleItem>,
-        thumbFile: File
+        thumbFile: File,
+        aspectRatio: AspectRatio = AspectRatio.ASPECT_9_16
     ): String? {
         val retriever = MediaMetadataRetriever()
         return try {
@@ -321,56 +412,82 @@ class VideoProcessor(private val context: Context) {
                 ?: retriever.frameAtTime
 
             if (bitmap != null) {
-                val size = bitmap.width.coerceAtMost(bitmap.height)
-                val x = (bitmap.width - size) / 2
-                val y = (bitmap.height - size) / 2
-                val squareBitmap = Bitmap.createBitmap(bitmap, x, y, size, size)
+                val targetW: Int
+                val targetH: Int
 
-                val mutableBitmap = squareBitmap.copy(Bitmap.Config.ARGB_8888, true)
-                val canvas = Canvas(mutableBitmap)
+                if (aspectRatio == AspectRatio.ASPECT_9_16) {
+                    targetW = 1080
+                    targetH = 1920
+                } else {
+                    targetW = 1080
+                    targetH = 1080
+                }
+
+                val resultBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(resultBitmap)
+                canvas.drawColor(Color.BLACK)
+
+                // Draw video frame
+                if (aspectRatio == AspectRatio.ASPECT_9_16) {
+                    val frameHeight = targetW // Square video in center of 9:16 canvas
+                    val frameY = (targetH - frameHeight) / 2f
+                    val srcSquare = bitmap.width.coerceAtMost(bitmap.height)
+                    val srcX = (bitmap.width - srcSquare) / 2
+                    val srcY = (bitmap.height - srcSquare) / 2
+                    val croppedSrc = Bitmap.createBitmap(bitmap, srcX, srcY, srcSquare, srcSquare)
+                    val dstRect = RectF(0f, frameY, targetW.toFloat(), frameY + frameHeight)
+                    canvas.drawBitmap(croppedSrc, null, dstRect, null)
+                } else {
+                    val srcSquare = bitmap.width.coerceAtMost(bitmap.height)
+                    val srcX = (bitmap.width - srcSquare) / 2
+                    val srcY = (bitmap.height - srcSquare) / 2
+                    val croppedSrc = Bitmap.createBitmap(bitmap, srcX, srcY, srcSquare, srcSquare)
+                    val dstRect = RectF(0f, 0f, targetW.toFloat(), targetH.toFloat())
+                    canvas.drawBitmap(croppedSrc, null, dstRect, null)
+                }
 
                 // Top Hook Text Banner
                 val bannerPaint = Paint().apply {
                     color = Color.parseColor("#E6000000") // 90% black
                     style = Paint.Style.FILL
                 }
-                val bannerHeight = (size * 0.22f)
-                canvas.drawRect(0f, 0f, size.toFloat(), bannerHeight, bannerPaint)
+                val bannerHeight = (targetH * 0.16f)
+                canvas.drawRect(0f, 0f, targetW.toFloat(), bannerHeight, bannerPaint)
 
                 val borderPaint = Paint().apply {
                     color = Color.parseColor("#FF6C00")
                     strokeWidth = 8f
                 }
-                canvas.drawLine(0f, bannerHeight, size.toFloat(), bannerHeight, borderPaint)
+                canvas.drawLine(0f, bannerHeight, targetW.toFloat(), bannerHeight, borderPaint)
 
                 val textPaint = Paint().apply {
                     color = Color.WHITE
-                    textSize = size * 0.048f
+                    textSize = targetW * 0.048f
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                     textAlign = Paint.Align.CENTER
                     isAntiAlias = true
                 }
 
                 val text = if (hookText.isNotBlank()) hookText else "VIRAL MOMENT 🔥"
-                val textX = size / 2f
+                val textX = targetW / 2f
                 val textY = bannerHeight / 2f + (textPaint.textSize / 3f)
 
                 canvas.drawText(text, textX, textY, textPaint)
 
-                // Bottom Spoken Subtitle Burn-In Banner (Active Word Highlight)
+                // Bottom Spoken Subtitle Burn-In Banner
                 val subText = subtitles.firstOrNull()?.text ?: "Watch until the end! 🔥"
                 if (subText.isNotBlank()) {
                     val subBgPaint = Paint().apply {
                         color = Color.parseColor("#CC000000")
                         style = Paint.Style.FILL
                     }
-                    val subBannerY = size * 0.76f
-                    val subBannerHeight = size * 0.18f
-                    canvas.drawRect(0f, subBannerY, size.toFloat(), subBannerY + subBannerHeight, subBgPaint)
+                    val subBannerY = targetH * 0.80f
+                    val subBannerHeight = targetH * 0.15f
+                    canvas.drawRect(0f, subBannerY, targetW.toFloat(), subBannerY + subBannerHeight, subBgPaint)
 
                     val subPaint = Paint().apply {
-                        color = Color.YELLOW // Vibrant active word highlight style
-                        textSize = size * 0.045f
+                        color = Color.YELLOW
+                        textSize = targetW * 0.045f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                         isAntiAlias = true
@@ -380,7 +497,7 @@ class VideoProcessor(private val context: Context) {
                 }
 
                 FileOutputStream(thumbFile).use { out ->
-                    mutableBitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                    resultBitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
                 }
                 return thumbFile.absolutePath
             }
