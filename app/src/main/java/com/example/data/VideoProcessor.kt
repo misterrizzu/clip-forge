@@ -242,24 +242,6 @@ class VideoProcessor(private val context: Context) {
         val cropEffect = Crop(left, right, -1.0f, 1.0f)
 
         try {
-            val mediaItem = MediaItem.Builder()
-                .setUri(Uri.fromFile(sourceVideoFile))
-                .setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(startMs)
-                        .setEndPositionMs(endMs)
-                        .build()
-                )
-                .build()
-
-            val editedMediaItem = EditedMediaItem.Builder(mediaItem)
-                .setEffects(Effects(emptyList(), listOf(cropEffect)))
-                .build()
-
-            val sequence = EditedMediaItemSequence(editedMediaItem)
-        val finalCropCenterX = (detectedCenterXNorm + manualCropOffset).coerceIn(0.15f, 0.85f)
-
-        try {
             // Trim video file strictly using MediaExtractor & MediaMuxer fallback or Media3 Transformer
             val trimmed = trimVideoWithMediaMuxer(sourceVideoFile, outputFile, startMs, endMs)
             if (!trimmed || !outputFile.exists() || outputFile.length() == 0L) {

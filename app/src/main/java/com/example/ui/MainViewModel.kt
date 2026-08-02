@@ -525,13 +525,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-            } catch (e: Exception) {
-                Log.e("MainViewModel", "Clip generation pipeline error", e)
-                _processingStatus.value = ProcessingPipelineStatus.Error(e.localizedMessage ?: "Processing error occurred.")
-            }
-        }
-    }
-
     fun updateClipManualCrop(clipId: String, newOffset: Float) {
         _clips.value = _clips.value.map { clip ->
             if (clip.id == clipId) {
