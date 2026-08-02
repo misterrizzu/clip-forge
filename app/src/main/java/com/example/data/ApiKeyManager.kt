@@ -62,9 +62,38 @@ class ApiKeyManager(private val context: Context) {
         return trimmed.length >= 10
     }
 
+    fun getSubtitleSettings(): SubtitleSettings {
+        val fontSize = try { SubtitleFontSize.valueOf(prefs.getString(KEY_SUB_FONT_SIZE, SubtitleFontSize.MEDIUM.name)!!) } catch (e: Exception) { SubtitleFontSize.MEDIUM }
+        val textColor = try { SubtitleTextColor.valueOf(prefs.getString(KEY_SUB_TEXT_COLOR, SubtitleTextColor.YELLOW.name)!!) } catch (e: Exception) { SubtitleTextColor.YELLOW }
+        val bgOpacity = try { SubtitleBgOpacity.valueOf(prefs.getString(KEY_SUB_BG_OPACITY, SubtitleBgOpacity.DARK.name)!!) } catch (e: Exception) { SubtitleBgOpacity.DARK }
+        val position = try { SubtitlePosition.valueOf(prefs.getString(KEY_SUB_POSITION, SubtitlePosition.BOTTOM.name)!!) } catch (e: Exception) { SubtitlePosition.BOTTOM }
+        return SubtitleSettings(fontSize, textColor, bgOpacity, position)
+    }
+
+    fun saveSubtitleSettings(settings: SubtitleSettings) {
+        prefs.edit()
+            .putString(KEY_SUB_FONT_SIZE, settings.fontSize.name)
+            .putString(KEY_SUB_TEXT_COLOR, settings.textColor.name)
+            .putString(KEY_SUB_BG_OPACITY, settings.bgOpacity.name)
+            .putString(KEY_SUB_POSITION, settings.position.name)
+            .apply()
+    }
+
+    fun getShowHookBanner(): Boolean = prefs.getBoolean(KEY_SHOW_HOOK_BANNER, true)
+    fun saveShowHookBanner(show: Boolean) = prefs.edit().putBoolean(KEY_SHOW_HOOK_BANNER, show).apply()
+
+    fun getShowSubtitlesBanner(): Boolean = prefs.getBoolean(KEY_SHOW_SUBTITLES_BANNER, true)
+    fun saveShowSubtitlesBanner(show: Boolean) = prefs.edit().putBoolean(KEY_SHOW_SUBTITLES_BANNER, show).apply()
+
     companion object {
         private const val PREFS_NAME = "clipforge_secure_prefs"
         private const val PREFS_NAME_FALLBACK = "clipforge_fallback_prefs"
         private const val KEY_GEMINI_API = "gemini_api_key_encrypted"
+        private const val KEY_SUB_FONT_SIZE = "sub_font_size"
+        private const val KEY_SUB_TEXT_COLOR = "sub_text_color"
+        private const val KEY_SUB_BG_OPACITY = "sub_bg_opacity"
+        private const val KEY_SUB_POSITION = "sub_position"
+        private const val KEY_SHOW_HOOK_BANNER = "show_hook_banner"
+        private const val KEY_SHOW_SUBTITLES_BANNER = "show_subtitles_banner"
     }
 }

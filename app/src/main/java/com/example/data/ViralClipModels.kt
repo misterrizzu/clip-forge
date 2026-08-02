@@ -7,6 +7,35 @@ sealed class VideoInputType {
     data class GoogleDriveUrl(val url: String) : VideoInputType()
 }
 
+enum class SubtitleFontSize(val label: String) {
+    SMALL("Small"),
+    MEDIUM("Medium"),
+    LARGE("Large")
+}
+
+enum class SubtitleTextColor(val label: String, val colorHex: String) {
+    WHITE("White", "#FFFFFF"),
+    YELLOW("Yellow", "#FFEB3B")
+}
+
+enum class SubtitleBgOpacity(val label: String, val alphaInt: Int) {
+    NONE("None", 0),
+    LIGHT("Light", 100),
+    DARK("Dark", 190)
+}
+
+enum class SubtitlePosition(val label: String) {
+    BOTTOM("Bottom (20%)"),
+    TOP("Top (20%)")
+}
+
+data class SubtitleSettings(
+    val fontSize: SubtitleFontSize = SubtitleFontSize.MEDIUM,
+    val textColor: SubtitleTextColor = SubtitleTextColor.YELLOW,
+    val bgOpacity: SubtitleBgOpacity = SubtitleBgOpacity.DARK,
+    val position: SubtitlePosition = SubtitlePosition.BOTTOM
+)
+
 data class SubtitleItem(
     val startSec: Float,
     val endSec: Float,
@@ -20,11 +49,21 @@ data class RawGeminiClipResponse(
 data class RawGeminiClip(
     val start_time: Float,
     val end_time: Float,
+    val viral_score: Int = 85,
+    val hook_score: Int = 85,
+    val emotion_score: Int = 80,
+    val curiosity_score: Int = 85,
+    val completion_score: Int = 90,
+    val value_score: Int = 85,
     val confidence_score: Float = 0.9f,
-    val suggested_hook_text: String = "",
-    val reason: String = "",
-    val suggested_title: String = "",
-    val suggested_description: String = "",
+    val hook_text: String = "",
+    val why_viral: String = "",
+    val caption_line: String = "",
+    val title: String = "",
+    val suggested_hook_text: String = hook_text,
+    val reason: String = why_viral,
+    val suggested_title: String = title,
+    val suggested_description: String = caption_line,
     val suggested_tags: List<String> = emptyList(),
     val subtitles: List<SubtitleItem> = emptyList()
 )

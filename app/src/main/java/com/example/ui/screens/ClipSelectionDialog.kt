@@ -186,15 +186,39 @@ fun ClipSelectionDialog(
                                             }
                                         }
                                         Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(MaterialTheme.colorScheme.primary)
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "🔥 ${clip.viral_score}/100",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.Black
+                                                )
+                                            }
+                                            Text(
+                                                text = "Hook: ${clip.hook_score}% · Emotion: ${clip.emotion_score}%",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "💡 \"${clip.suggested_hook_text}\"",
+                                            text = "💡 \"${clip.hook_text.ifEmpty { clip.suggested_hook_text }}\"",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = clip.reason,
+                                            text = clip.why_viral.ifEmpty { clip.reason },
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 2,

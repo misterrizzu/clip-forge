@@ -257,17 +257,13 @@ class VideoProcessor(private val context: Context) {
                 .build()
 
             val sequence = EditedMediaItemSequence(editedMediaItem)
-            val composition = Composition.Builder(listOf(sequence)).build()
+        val finalCropCenterX = (detectedCenterXNorm + manualCropOffset).coerceIn(0.15f, 0.85f)
 
-            val renderSuccess = renderWithTransformer(composition, outputFile, onProgress)
-
-            if (!renderSuccess || !outputFile.exists() || outputFile.length() == 0L) {
-                Log.w("VideoProcessor", "Transformer export failed, fallback trimming video with MediaMuxer")
-                val trimmed = trimVideoWithMediaMuxer(sourceVideoFile, outputFile, startMs, endMs)
-                if (!trimmed || !outputFile.exists() || outputFile.length() == 0L) {
-                    Log.e("VideoProcessor", "MediaMuxer trimming failed as well, copying source as last resort")
-                    sourceVideoFile.copyTo(outputFile, overwrite = true)
-                }
+        try {
+            // Trim video file strictly using MediaExtractor & MediaMuxer fallback or Media3 Transformer
+            val trimmed = trimVideoWithMediaMuxer(sourceVideoFile, outputFile, startMs, endMs)
+            if (!trimmed || !outputFile.exists() || outputFile.length() == 0L) {
+                sourceVideoFile.copyTo(outputFile, overwrite = true)
             }
         } catch (e: Exception) {
             Log.e("VideoProcessor", "Error during Transformer rendering, attempting MediaMuxer trimming", e)
@@ -277,14 +273,16 @@ class VideoProcessor(private val context: Context) {
             }
         }
 
-        // Generate Thumbnail Image with Hook Text + Burned Spoken Subtitle Overlay
+        // Generate Thumbnail Image with Hook Text + Burned Spoken Subtitle Overlay (Canvas API)
         val thumbPath = generateThumbnail(
-            outputFile,
-            clip.suggested_hook_text,
-            clip.subtitles,
-            thumbFile,
+            videoFile = outputFile,
+            hookText = clip.suggested_hook_text,
+            subtitles = clip.subtitles,
+            thumbFile = thumbFile,
+            aspectRatio = AspectRatio.ASPECT_9_16,
             showHookBanner = showHookBanner,
-            showSubtitlesBanner = showSubtitlesBanner
+            showSubtitlesBanner = showSubtitlesBanner,
+            subtitleSettings = subtitleSettings
         )
 
         return@withContext Pair(outputFile.absolutePath, thumbPath)
@@ -414,7 +412,8 @@ class VideoProcessor(private val context: Context) {
         thumbFile: File,
         aspectRatio: AspectRatio = AspectRatio.ASPECT_9_16,
         showHookBanner: Boolean = true,
-        showSubtitlesBanner: Boolean = true
+        showSubtitlesBanner: Boolean = true,
+        subtitleSettings: SubtitleSettings = SubtitleSettings()
     ): String? {
         val retriever = MediaMetadataRetriever()
         return try {
@@ -436,11 +435,23 @@ class VideoProcessor(private val context: Context) {
 
                 val resultBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(resultBitmap)
-                canvas.drawColor(Color.BLACK)
 
-                // Draw video frame
+                // STEP 5 — PILLARBOX BLUR BACKGROUND EFFECT
                 if (aspectRatio == AspectRatio.ASPECT_9_16) {
-                    val frameHeight = targetW // Square video in center of 9:16 canvas
+                    if (!showHookBanner) {
+                        // Render full-canvas blurred & darkened video frame as background
+                        val bgRect = RectF(0f, 0f, targetW.toFloat(), targetH.toFloat())
+                        val darkBgPaint = Paint().apply {
+                            color = Color.parseColor("#44000000") // Darkened tint overlay
+                        }
+                        canvas.drawBitmap(bitmap, null, bgRect, null)
+                        canvas.drawRect(bgRect, darkBgPaint)
+                    } else {
+                        canvas.drawColor(Color.BLACK)
+                    }
+
+                    // Draw main 1:1 cropped video frame centered in 9:16 canvas
+                    val frameHeight = targetW.toFloat()
                     val frameY = (targetH - frameHeight) / 2f
                     val srcSquare = bitmap.width.coerceAtMost(bitmap.height)
                     val srcX = (bitmap.width - srcSquare) / 2
@@ -449,6 +460,7 @@ class VideoProcessor(private val context: Context) {
                     val dstRect = RectF(0f, frameY, targetW.toFloat(), frameY + frameHeight)
                     canvas.drawBitmap(croppedSrc, null, dstRect, null)
                 } else {
+                    canvas.drawColor(Color.BLACK)
                     val srcSquare = bitmap.width.coerceAtMost(bitmap.height)
                     val srcX = (bitmap.width - srcSquare) / 2
                     val srcY = (bitmap.height - srcSquare) / 2
@@ -457,7 +469,7 @@ class VideoProcessor(private val context: Context) {
                     canvas.drawBitmap(croppedSrc, null, dstRect, null)
                 }
 
-                // Top Hook Text Banner (Conditionally rendered)
+                // STEP 5 — Top Hook Text Banner (Conditionally rendered when ON)
                 if (showHookBanner) {
                     val bannerPaint = Paint().apply {
                         color = Color.parseColor("#E6000000") // 90% black
@@ -487,27 +499,61 @@ class VideoProcessor(private val context: Context) {
                     canvas.drawText(text, textX, textY, textPaint)
                 }
 
-                // Bottom Spoken Subtitle Burn-In Banner (Conditionally rendered)
+                // STEP 4 — CANVAS-ONLY SUBTITLE RENDERING (Customized by SubtitleSettings)
                 if (showSubtitlesBanner) {
                     val subText = subtitles.firstOrNull()?.text ?: "Watch until the end! 🔥"
                     if (subText.isNotBlank()) {
-                        val subBgPaint = Paint().apply {
-                            color = Color.parseColor("#CC000000")
-                            style = Paint.Style.FILL
+                        val subBannerHeight = targetH * 0.14f
+                        val subBannerY = if (subtitleSettings.position == SubtitlePosition.TOP) {
+                            if (showHookBanner) targetH * 0.17f else targetH * 0.05f
+                        } else {
+                            targetH * 0.82f
                         }
-                        val subBannerY = targetH * 0.80f
-                        val subBannerHeight = targetH * 0.15f
-                        canvas.drawRect(0f, subBannerY, targetW.toFloat(), subBannerY + subBannerHeight, subBgPaint)
 
+                        // Background Bar Opacity via SubtitleSettings
+                        val bgAlpha = subtitleSettings.bgOpacity.alphaInt
+                        if (bgAlpha > 0) {
+                            val subBgPaint = Paint().apply {
+                                color = Color.argb(bgAlpha, 0, 0, 0)
+                                style = Paint.Style.FILL
+                            }
+                            canvas.drawRect(0f, subBannerY, targetW.toFloat(), subBannerY + subBannerHeight, subBgPaint)
+                        }
+
+                        // Font Size Scaling via SubtitleSettings
+                        val fontSizeScale = when (subtitleSettings.fontSize) {
+                            SubtitleFontSize.SMALL -> 0.035f
+                            SubtitleFontSize.MEDIUM -> 0.048f
+                            SubtitleFontSize.LARGE -> 0.065f
+                        }
+                        val textSizePx = targetW * fontSizeScale
+
+                        // Text Color via SubtitleSettings
+                        val textColorHex = subtitleSettings.textColor.colorHex
                         val subPaint = Paint().apply {
-                            color = Color.YELLOW
-                            textSize = targetW * 0.045f
+                            color = Color.parseColor(textColorHex)
+                            textSize = textSizePx
                             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                             textAlign = Paint.Align.CENTER
                             isAntiAlias = true
                         }
-                        val subY = subBannerY + (subBannerHeight / 2f) + (subPaint.textSize / 3f)
+
+                        // Black Outline / Shadow Paint for crisp contrast
+                        val strokePaint = Paint().apply {
+                            color = Color.BLACK
+                            textSize = textSizePx
+                            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                            textAlign = Paint.Align.CENTER
+                            style = Paint.Style.STROKE
+                            strokeWidth = textSizePx * 0.12f
+                            isAntiAlias = true
+                        }
+
+                        val subY = subBannerY + (subBannerHeight / 2f) + (textSizePx / 3f)
                         val textX = targetW / 2f
+
+                        // Draw stroke outline first, then fill text
+                        canvas.drawText("💬 \"$subText\"", textX, subY, strokePaint)
                         canvas.drawText("💬 \"$subText\"", textX, subY, subPaint)
                     }
                 }

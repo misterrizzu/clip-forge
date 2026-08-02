@@ -101,20 +101,27 @@ class GeminiClipService {
             Analyze the provided video transcript and speech audio to find high-engagement, viral clips.
 
             CRITICAL DIRECTIVES:
-            1. CLIP SELECTION & DURATIONS:
-               - Video total duration: $videoDurationSeconds seconds.
-               - Each clip MUST be strictly between $effectiveMinDuration and $effectiveMaxDuration seconds.
-               - Timestamps MUST be within 0.0 and $videoDurationSeconds seconds.
+            1. VIRAL SCORING FORMULA (Rate each 0-100):
+               - Hook Score (35%): Does first 3s contain stats, name drops, contradictions, questions, or hot takes?
+               - Emotion Score (25%): Excitement, speed of speech, vulnerability/personal story, humor, surprise.
+               - Curiosity Score (20%): Open loops, counterintuitive facts, "secret/nobody talks about", resolution.
+               - Completion Score (10%): Natural sentence start & conclusion, single focused idea.
+               - Value Score (10%): Practical takeaway or actionable insight.
+               Calculated Final Score = (Hook*0.35) + (Emotion*0.25) + (Curiosity*0.20) + (Completion*0.10) + (Value*0.10).
+               ONLY HIGH-ENGAGEMENT CLIPS SCORING 72 OR HIGHER WILL BE QUALIFIED.
 
-            2. CONTENT GROUNDING (STRICT RULE):
-               - "suggested_hook_text", "suggested_title", and clip captions MUST come directly from what the speaker ACTUALLY SAYS in that specific clip transcript.
-               - NEVER invent topics or subjects from outside the specific clip dialogue.
-               - DO NOT output spammy, random, or auto-generated @handles.
+            2. CURIOSITY-GAP HOOK GENERATION:
+               - Rewrite the strongest bold statement in first 8s of clip as a curiosity-gap hook:
+                 Pattern 1: "[Famous person] [unexpected thing]"
+                 Pattern 2: "The [adjective] truth about [topic]"
+                 Pattern 3: "[Number] [things/reasons] that [result]"
+                 Pattern 4: "Why [common belief] is completely wrong"
+               - Keep hook text UNDER 8 WORDS. Never start with "I" or speaker's name.
 
-            3. CAMPAIGN RULES & METADATA FORMAT:
-               - "suggested_description" (caption): MUST contain the hook text followed by the exact REQUIRED_CAPTION_TEXT from rules (if any): "${campaignRules.requiredCaptionText}".
-               - "suggested_tags": Include ONLY real, explicitly named @handles from rules: ${campaignRules.requiredHandles.joinToString(", ")}. IF NO HANDLES WERE SPECIFIED IN RULES, RETURN AN EMPTY ARRAY. DO NOT GENERATE @HANDLES.
-               - "hashtags": 3-5 real topic hashtags based strictly on what the speaker says in this clip.
+            3. CONTENT GROUNDING & FORMAT:
+               - "hook_text" and "title" MUST come directly from what speaker actually says in clip.
+               - "caption_line": Hook rephrased as social caption + REQUIRED_CAPTION_TEXT from campaign rules: "${campaignRules.requiredCaptionText}".
+               - "suggested_tags": Include ONLY real explicitly named @handles from rules: ${campaignRules.requiredHandles.joinToString(", ")}. IF NONE, RETURN EMPTY ARRAY. DO NOT INVENT HANDLES.
 
             Return JSON matching this EXACT structure:
             {
@@ -122,13 +129,17 @@ class GeminiClipService {
                 {
                   "start_time": float,
                   "end_time": float,
-                  "confidence_score": float (0.50 - 0.99),
-                  "suggested_hook_text": "Exact hook line spoken in clip",
-                  "suggested_title": "Descriptive title based on what speaker says in clip",
-                  "suggested_description": "Hook line + campaign required caption text",
+                  "hook_score": int (0-100),
+                  "emotion_score": int (0-100),
+                  "curiosity_score": int (0-100),
+                  "completion_score": int (0-100),
+                  "value_score": int (0-100),
+                  "hook_text": "under 8 words curiosity gap hook",
+                  "why_viral": "one sentence explaining strongest element",
+                  "caption_line": "hook rephrased as social caption",
+                  "title": "descriptive title of what speaker says",
                   "suggested_tags": ["@real_handle_from_rules_only"],
                   "hashtags": ["#Topic1", "#Topic2", "#Topic3"],
-                  "reason": "Why this moment is high engagement",
                   "subtitles": [{"start_sec": float, "end_sec": float, "text": "spoken words"}]
                 }
               ]
@@ -155,7 +166,7 @@ class GeminiClipService {
                 appendLine(customInstructions)
             }
 
-            appendLine("\nIdentify all viral clip segments matching duration requirements. Ground all text in actual clip speech.")
+            appendLine("\nIdentify all viral clip segments matching duration requirements. Rate using the 5-metric formula and return qualifying clips.")
         }.toString()
 
         val partsArray = JSONArray()
@@ -252,11 +263,26 @@ class GeminiClipService {
                     endTime = endTime.coerceIn(startTime + 5f, maxDurationSeconds)
                 }
 
-                val confidence = clipObj.optDouble("confidence_score", 0.90).toFloat()
-                val hookText = clipObj.optString("suggested_hook_text", "Key Highlight 🔥")
-                val reason = clipObj.optString("reason", "Spoken highlight from clip.")
-                val title = clipObj.optString("suggested_title", "Viral Clip #${i + 1}")
-                var desc = clipObj.optString("suggested_description", hookText)
+                val hookScore = clipObj.optInt("hook_score", 80)
+                val emotionScore = clipObj.optInt("emotion_score", 80)
+                val curiosityScore = clipObj.optInt("curiosity_score", 80)
+                val completionScore = clipObj.optInt("completion_score", 85)
+                val valueScore = clipObj.optInt("value_score", 80)
+
+                // Calculate exact weighted final score
+                val calculatedScore = ((hookScore * 0.35f) + (emotionScore * 0.25f) + (curiosityScore * 0.20f) + (completionScore * 0.10f) + (valueScore * 0.10f)).toInt()
+                val finalViralScore = clipObj.optInt("viral_score", calculatedScore)
+
+                // STEP 1 THRESHOLD FILTER: Only return clips scoring 72+ out of 100
+                if (finalViralScore < 72) {
+                    Log.d("GeminiClipService", "Filtered out clip starting at ${startTime}s due to low viral score ($finalViralScore < 72)")
+                    continue
+                }
+
+                val hookText = clipObj.optString("hook_text", clipObj.optString("suggested_hook_text", "Key Highlight 🔥")).trim()
+                val whyViral = clipObj.optString("why_viral", clipObj.optString("reason", "Spoken highlight from clip.")).trim()
+                val title = clipObj.optString("title", clipObj.optString("suggested_title", "Viral Clip #${i + 1}")).trim()
+                var desc = clipObj.optString("caption_line", clipObj.optString("suggested_description", hookText)).trim()
 
                 // Enforce required caption text if specified in rules
                 if (campaignRules.requiredCaptionText.isNotBlank() && !desc.contains(campaignRules.requiredCaptionText, ignoreCase = true)) {
@@ -309,11 +335,11 @@ class GeminiClipService {
                 if (subsArr != null) {
                     for (s in 0 until subsArr.length()) {
                         val subObj = subsArr.getJSONObject(s)
-                        val sStart = subObj.optDouble("start_sec", (startTime + (s * 3)).toDouble()).toFloat()
-                        val sEnd = subObj.optDouble("end_sec", (sStart + 2.5f).toDouble()).toFloat()
-                        val text = subObj.optString("text", "")
-                        if (text.isNotBlank()) {
-                            subtitlesList.add(SubtitleItem(sStart, sEnd, text))
+                        val subStart = subObj.optDouble("start_sec", subObj.optDouble("start", startTime.toDouble())).toFloat()
+                        val subEnd = subObj.optDouble("end_sec", subObj.optDouble("end", endTime.toDouble())).toFloat()
+                        val subText = subObj.optString("text", "")
+                        if (subText.isNotBlank()) {
+                            subtitlesList.add(SubtitleItem(subStart, subEnd, subText))
                         }
                     }
                 }
@@ -326,9 +352,19 @@ class GeminiClipService {
                     RawGeminiClip(
                         start_time = startTime,
                         end_time = endTime,
-                        confidence_score = confidence,
+                        viral_score = finalViralScore,
+                        hook_score = hookScore,
+                        emotion_score = emotionScore,
+                        curiosity_score = curiosityScore,
+                        completion_score = completionScore,
+                        value_score = valueScore,
+                        confidence_score = (finalViralScore / 100f).coerceIn(0.7f, 0.99f),
+                        hook_text = hookText,
+                        why_viral = whyViral,
+                        caption_line = desc,
+                        title = title,
                         suggested_hook_text = hookText,
-                        reason = reason,
+                        reason = whyViral,
                         suggested_title = title,
                         suggested_description = desc,
                         suggested_tags = finalCombinedTags,
@@ -337,9 +373,11 @@ class GeminiClipService {
                 )
             }
         } catch (e: Exception) {
-            Log.e("GeminiClipService", "Error parsing clips JSON string", e)
+            Log.e("GeminiClipService", "Error parsing clips JSON", e)
         }
-        return resultList
+
+        // STEP 1 SORT & MAX 10 CLIPS: Sort results by final score descending, cap at 10 clips
+        return resultList.sortedByDescending { it.viral_score }.take(10)
     }
 
     /**

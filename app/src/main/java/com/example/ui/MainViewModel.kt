@@ -92,11 +92,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _enablePreRenderReview = MutableStateFlow(sharedPrefs.getBoolean("enable_pre_render_review", true))
     val enablePreRenderReview: StateFlow<Boolean> = _enablePreRenderReview.asStateFlow()
 
-    private val _showHookBanner = MutableStateFlow(true)
+    private val _showHookBanner = MutableStateFlow(apiKeyManager.getShowHookBanner())
     val showHookBanner: StateFlow<Boolean> = _showHookBanner.asStateFlow()
 
-    private val _showSubtitlesBanner = MutableStateFlow(true)
+    private val _showSubtitlesBanner = MutableStateFlow(apiKeyManager.getShowSubtitlesBanner())
     val showSubtitlesBanner: StateFlow<Boolean> = _showSubtitlesBanner.asStateFlow()
+
+    private val _subtitleSettings = MutableStateFlow(apiKeyManager.getSubtitleSettings())
+    val subtitleSettings: StateFlow<SubtitleSettings> = _subtitleSettings.asStateFlow()
 
     private val _currentProjectId = MutableStateFlow<String?>(null)
     val currentProjectId: StateFlow<String?> = _currentProjectId.asStateFlow()
@@ -142,10 +145,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setShowHookBanner(show: Boolean) {
         _showHookBanner.value = show
+        apiKeyManager.saveShowHookBanner(show)
     }
 
     fun setShowSubtitlesBanner(show: Boolean) {
         _showSubtitlesBanner.value = show
+        apiKeyManager.saveShowSubtitlesBanner(show)
+    }
+
+    fun updateSubtitleSettings(newSettings: SubtitleSettings) {
+        _subtitleSettings.value = newSettings
+        apiKeyManager.saveSubtitleSettings(newSettings)
     }
 
     fun loadProjects() {
@@ -462,7 +472,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         sourceVideoFile = videoFile,
                         clip = rawClip,
                         showHookBanner = _showHookBanner.value,
-                        showSubtitlesBanner = _showSubtitlesBanner.value
+                        showSubtitlesBanner = _showSubtitlesBanner.value,
+                        subtitleSettings = _subtitleSettings.value
                     ) { clipProgress ->
                     }
 

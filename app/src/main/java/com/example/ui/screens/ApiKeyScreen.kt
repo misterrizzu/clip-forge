@@ -134,29 +134,160 @@ fun ApiKeyScreen(
 
             Divider(color = MaterialTheme.colorScheme.outline)
 
-            // Setting Toggle: Pre-Render Candidate Clip Review
-            Row(
+            val showHookBanner by viewModel.showHookBanner.collectAsState()
+            val showSubtitlesBanner by viewModel.showSubtitlesBanner.collectAsState()
+            val subSettings by viewModel.subtitleSettings.collectAsState()
+
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Pre-Render Clip Approval Step",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Select/approve clips before video rendering starts",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Text(
+                    text = "Canvas Overlay & Banner Settings",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                // Toggle 1: Top Hook Text Banner
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Top Hook Text Banner",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (showHookBanner) "Shows bold hook banner (OFF uses pillarbox blur)" else "Pillarbox blur effect enabled (OFF)",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = showHookBanner,
+                        onCheckedChange = { viewModel.setShowHookBanner(it) }
                     )
                 }
-                Switch(
-                    checked = enablePreRenderReview,
-                    onCheckedChange = { viewModel.setEnablePreRenderReview(it) }
+
+                // Toggle 2: Bottom Subtitles Banner
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Spoken Dialogue Subtitles",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Burn in subtitles via Android Canvas API",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = showSubtitlesBanner,
+                        onCheckedChange = { viewModel.setShowSubtitlesBanner(it) }
+                    )
+                }
+
+                // Toggle 3: Pre-Render Approval
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Pre-Render Clip Approval Step",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Approve candidate clips before rendering video",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = enablePreRenderReview,
+                        onCheckedChange = { viewModel.setEnablePreRenderReview(it) }
+                    )
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outline)
+
+                Text(
+                    text = "Subtitle Styling (Canvas API)",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
+
+                // Subtitle Font Size Chips
+                Column {
+                    Text("Font Size:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        com.example.data.SubtitleFontSize.values().forEach { size ->
+                            FilterChip(
+                                selected = subSettings.fontSize == size,
+                                onClick = { viewModel.updateSubtitleSettings(subSettings.copy(fontSize = size)) },
+                                label = { Text(size.label, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
+
+                // Subtitle Text Color Chips
+                Column {
+                    Text("Text Color:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        com.example.data.SubtitleTextColor.values().forEach { color ->
+                            FilterChip(
+                                selected = subSettings.textColor == color,
+                                onClick = { viewModel.updateSubtitleSettings(subSettings.copy(textColor = color)) },
+                                label = { Text(color.label, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
+
+                // Subtitle Background Opacity Chips
+                Column {
+                    Text("Background Opacity:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        com.example.data.SubtitleBgOpacity.values().forEach { opacity ->
+                            FilterChip(
+                                selected = subSettings.bgOpacity == opacity,
+                                onClick = { viewModel.updateSubtitleSettings(subSettings.copy(bgOpacity = opacity)) },
+                                label = { Text(opacity.label, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
+
+                // Subtitle Position Chips
+                Column {
+                    Text("Position:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        com.example.data.SubtitlePosition.values().forEach { pos ->
+                            FilterChip(
+                                selected = subSettings.position == pos,
+                                onClick = { viewModel.updateSubtitleSettings(subSettings.copy(position = pos)) },
+                                label = { Text(pos.label, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
             }
 
             // Button 1: Get API Key
