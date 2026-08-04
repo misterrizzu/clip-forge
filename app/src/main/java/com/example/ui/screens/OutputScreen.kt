@@ -135,6 +135,7 @@ fun OutputScreen(
                             onPlayPreview = { viewModel.showPreviewModal(clip) },
                             onExport = { viewModel.exportClipToStorage(context, clip) },
                             onMarkUsed = { viewModel.markClipAsUsed(clip.id) },
+                            onDelete = { viewModel.deleteClip(clip.id) },
                             onTogglePlatform = { platform -> viewModel.toggleClipPlatform(clip.id, platform) },
                             onToggleField = { field -> viewModel.toggleClipField(clip.id, field) },
                             onUpdateData = { title, desc, tags -> viewModel.updateClipData(clip.id, title, desc, tags) },
@@ -162,6 +163,7 @@ fun ViralClipCard(
     onPlayPreview: () -> Unit,
     onExport: () -> Unit,
     onMarkUsed: () -> Unit,
+    onDelete: () -> Unit,
     onTogglePlatform: (Platform) -> Unit,
     onToggleField: (String) -> Unit,
     onUpdateData: (String, String, String) -> Unit,
@@ -220,21 +222,43 @@ fun ViralClipCard(
                     Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(36.dp))
                 }
 
-                // Viral score badge top-right
-                Box(
+                // Viral score badge top-right & Delete button
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(NeonOrange)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "🔥 ${clip.viralScore}/100",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(NeonOrange)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "🔥 ${clip.viralScore}/100",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .clickable { onDelete() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Clip",
+                            tint = ErrorRed,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
 
                 // Timestamp badge bottom-left

@@ -824,6 +824,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun deleteClip(clipId: String) {
+        val clipToDelete = _clips.value.find { it.id == clipId }
+        _clips.value = _clips.value.filter { it.id != clipId }
+        viewModelScope.launch(Dispatchers.IO) {
+            clipDao.deleteClip(clipId)
+            // Delete actual generated video & thumbnail file from storage to free space
+            clipToDelete?.processedVideoPath?.let { path ->
+                try {
+                    val f = File(path)
+                    if (f.exists()) f.delete()
+                } catch (ignored: Exception) {}
+            }
+            clipToDelete?.thumbnailPath?.let { path ->
+                try {
+                    val f = File(path)
+                    if (f.exists()) f.delete()
+                } catch (ignored: Exception) {}
+            }
+        }
+    }
+
     fun updateClipManualCrop(clipId: String, newOffset: Float) {
         _clips.value = _clips.value.map { clip ->
             if (clip.id == clipId) {
