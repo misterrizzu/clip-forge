@@ -7,6 +7,13 @@ sealed class VideoInputType {
     data class GoogleDriveUrl(val url: String) : VideoInputType()
 }
 
+enum class Platform(val label: String, val icon: String) {
+    YOUTUBE("YouTube", "▶"),
+    INSTAGRAM("Instagram", "📷"),
+    TIKTOK("TikTok", "🎵"),
+    X("X (Twitter)", "𝕏")
+}
+
 enum class SubtitleFontSize(val label: String) {
     SMALL("Small"),
     MEDIUM("Medium"),
@@ -49,13 +56,13 @@ data class RawGeminiClipResponse(
 data class RawGeminiClip(
     val start_time: Float,
     val end_time: Float,
-    val viral_score: Int = 85,
-    val hook_score: Int = 85,
-    val emotion_score: Int = 80,
-    val curiosity_score: Int = 85,
-    val completion_score: Int = 90,
-    val value_score: Int = 85,
-    val confidence_score: Float = 0.9f,
+    val viral_score: Int = 75,
+    val hook_score: Int = 75,
+    val emotion_score: Int = 70,
+    val curiosity_score: Int = 70,
+    val completion_score: Int = 75,
+    val value_score: Int = 70,
+    val confidence_score: Float = 0.75f,
     val hook_text: String = "",
     val why_viral: String = "",
     val caption_line: String = "",
@@ -64,7 +71,10 @@ data class RawGeminiClip(
     val reason: String = why_viral,
     val suggested_title: String = title,
     val suggested_description: String = caption_line,
-    val suggested_tags: List<String> = emptyList(),
+    val suggested_tags: List<String> = emptyList(),       // combined legacy field
+    val handles: List<String> = emptyList(),               // @handles only (real, from rules)
+    val hashtags: List<String> = emptyList(),              // #Hashtags only (content-relevant)
+    val seo_keywords: List<String> = emptyList(),          // plain SEO words for YouTube
     val subtitles: List<SubtitleItem> = emptyList()
 )
 
@@ -88,14 +98,18 @@ data class ViralClip(
     val startTimeSeconds: Float,
     val endTimeSeconds: Float,
     val confidenceScore: Float,
+    val viralScore: Int = 75,
     val suggestedHookText: String,
     val reason: String,
     var title: String,
     var description: String,
     var tags: List<String>,
+    var handles: List<String> = emptyList(),           // @handles (real, from rules)
+    var hashtags: List<String> = emptyList(),           // #Hashtags (content-relevant)
+    var seoKeywords: List<String> = emptyList(),        // plain SEO keywords for YouTube
     var processedVideoPath: String? = null,
     var thumbnailPath: String? = null,
-    var manualCropOffset: Float = 0f, // -0.5 to +0.5 manual shift
+    var manualCropOffset: Float = 0f,
     var subtitles: List<SubtitleItem> = emptyList(),
     var isCompliant: Boolean = true,
     var complianceDetails: String = "Compliant with campaign rules",
@@ -103,6 +117,8 @@ data class ViralClip(
     var showDescription: Boolean = true,
     var showTags: Boolean = true,
     var isExported: Boolean = false,
+    var isUsed: Boolean = false,                        // Marks clip as already posted/used
+    var selectedPlatforms: Set<Platform> = setOf(Platform.INSTAGRAM, Platform.TIKTOK),
     var aspectRatio: AspectRatio = AspectRatio.ASPECT_9_16,
     var showHookBanner: Boolean = true,
     var showSubtitlesBanner: Boolean = true

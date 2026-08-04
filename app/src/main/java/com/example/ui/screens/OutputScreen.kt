@@ -1,8 +1,15 @@
 package com.example.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,9 +27,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
+import com.example.data.Platform
 import com.example.data.ViralClip
 import com.example.ui.MainViewModel
 import com.example.ui.theme.*
@@ -51,7 +60,7 @@ fun OutputScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "${clips.size} clips ready",
+                            text = "${clips.size} clips ready · ${clips.count { it.isUsed }} used",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -63,15 +72,12 @@ fun OutputScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            viewModel.startNewSession()
-                            onBackToInput()
-                        }
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "New Video Session", tint = MaterialTheme.colorScheme.primary)
+                    IconButton(onClick = {
+                        viewModel.startNewSession()
+                        onBackToInput()
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = "New Session", tint = MaterialTheme.colorScheme.primary)
                     }
-
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -87,59 +93,32 @@ fun OutputScreen(
                     tonalElevation = 8.dp,
                     border = CardDefaults.outlinedCardBorder()
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                         Button(
                             onClick = { viewModel.exportAllClips(context) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp),
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
                             shape = RoundedCornerShape(14.dp)
                         ) {
                             Icon(Icons.Default.DownloadForOffline, contentDescription = null, tint = Color.Black)
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Export All Clips to Gallery",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                            )
+                            Text("Export All to Gallery", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                         }
                     }
                 }
             }
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             if (clips.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.MovieFilter,
-                            contentDescription = null,
-                            tint = TextMuted,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Text("No generated clips yet", fontSize = 16.sp, color = TextSecondary)
-                        Button(onClick = onBackToInput) {
-                            Text("Go to Input Screen")
-                        }
+                        Icon(Icons.Default.MovieFilter, contentDescription = null, tint = TextMuted, modifier = Modifier.size(64.dp))
+                        Text("No clips yet", fontSize = 16.sp, color = TextSecondary)
+                        Button(onClick = onBackToInput) { Text("Go to Input Screen") }
                     }
                 }
             } else {
@@ -153,27 +132,22 @@ fun OutputScreen(
                             clip = clip,
                             onPlayPreview = { viewModel.showPreviewModal(clip) },
                             onExport = { viewModel.exportClipToStorage(context, clip) },
-                            onCopyMetadata = { viewModel.copyClipMetadataToClipboard(context, clip) },
+                            onMarkUsed = { viewModel.markClipAsUsed(clip.id) },
+                            onTogglePlatform = { platform -> viewModel.toggleClipPlatform(clip.id, platform) },
                             onToggleField = { field -> viewModel.toggleClipField(clip.id, field) },
-                            onUpdateData = { title, desc, tags ->
-                                viewModel.updateClipData(clip.id, title, desc, tags)
-                            },
-                            onUpdateManualCrop = { offset ->
-                                viewModel.updateClipManualCrop(clip.id, offset)
-                            }
+                            onUpdateData = { title, desc, tags -> viewModel.updateClipData(clip.id, title, desc, tags) },
+                            onUpdateManualCrop = { offset -> viewModel.updateClipManualCrop(clip.id, offset) },
+                            context = context
                         )
                     }
                 }
             }
 
-            // Preview Video Dialog
             activePreviewClip?.let { previewClip ->
                 VideoPreviewDialog(
                     clip = previewClip,
                     onDismiss = { viewModel.showPreviewModal(null) },
-                    onExport = { clipToExport ->
-                        viewModel.exportClipToStorage(context, clipToExport)
-                    }
+                    onExport = { clipToExport -> viewModel.exportClipToStorage(context, clipToExport) }
                 )
             }
         }
@@ -185,10 +159,12 @@ fun ViralClipCard(
     clip: ViralClip,
     onPlayPreview: () -> Unit,
     onExport: () -> Unit,
-    onCopyMetadata: () -> Unit,
+    onMarkUsed: () -> Unit,
+    onTogglePlatform: (Platform) -> Unit,
     onToggleField: (String) -> Unit,
     onUpdateData: (String, String, String) -> Unit,
-    onUpdateManualCrop: (Float) -> Unit
+    onUpdateManualCrop: (Float) -> Unit,
+    context: Context
 ) {
     var editableTitle by remember(clip.title) { mutableStateOf(clip.title) }
     var editableDesc by remember(clip.description) { mutableStateOf(clip.description) }
@@ -197,19 +173,27 @@ fun ViralClipCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        colors = CardDefaults.cardColors(
+            containerColor = if (clip.isUsed)
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+            else DarkSurface
+        ),
         shape = RoundedCornerShape(20.dp),
-        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
+        border = if (clip.isUsed)
+            CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(SuccessGreen.copy(alpha = 0.5f)))
+        else
+            CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Thumbnail Preview Container (1:1 aspect)
+
+            // ── THUMBNAIL PREVIEW ──────────────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1f)
+                    .aspectRatio(9f / 16f)
                     .clip(RoundedCornerShape(14.dp))
                     .background(DarkSurfaceVariant)
                     .clickable { onPlayPreview() },
@@ -223,31 +207,18 @@ fun ViralClipCard(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Icon(
-                        imageVector = Icons.Default.PlayCircle,
-                        contentDescription = null,
-                        tint = NeonOrange,
-                        modifier = Modifier.size(54.dp)
-                    )
+                    Icon(Icons.Default.PlayCircle, contentDescription = null, tint = NeonOrange, modifier = Modifier.size(54.dp))
                 }
 
-                // Center Play Icon Button Overlay
+                // Play button overlay
                 Box(
-                    modifier = Modifier
-                        .size(58.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.65f)),
+                    modifier = Modifier.size(58.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.65f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(36.dp))
                 }
 
-                // Confidence Badge Top Right
+                // Viral score badge top-right
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -257,14 +228,14 @@ fun ViralClipCard(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${(clip.confidenceScore * 100).toInt()}% VIRAL SCORE",
+                        text = "🔥 ${clip.viralScore}/100",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
                     )
                 }
 
-                // Timestamp Badge Bottom Left
+                // Timestamp badge bottom-left
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -273,235 +244,374 @@ fun ViralClipCard(
                         .background(Color.Black.copy(alpha = 0.8f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text(
-                        text = clip.formattedTimeRange(),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                }
-            }
-
-            // Feature Badges Row (Campaign Compliance & Spoken Subtitles)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                    color = ElectricViolet.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.ClosedCaption, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Spoken Subtitles Burned-In", fontSize = 10.sp, color = ElectricViolet, fontWeight = FontWeight.Bold)
-                    }
+                    Text(clip.formattedTimeRange(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 }
 
-                if (clip.isCompliant) {
-                    Surface(
-                        color = SuccessGreen.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(8.dp)
+                // "USED" stamp badge top-left
+                if (clip.isUsed) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(10.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SuccessGreen)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Verified, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(14.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black, modifier = Modifier.size(12.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Rules Compliant", fontSize = 10.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
+                            Text("USED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                         }
                     }
                 }
             }
 
-            // Manual Crop Fine-Tuning Slider Control
+            // ── STATUS BADGES ROW ────────────────────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (clip.isCompliant) {
+                    Surface(color = SuccessGreen.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+                        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Verified, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Rules Compliant", fontSize = 10.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                // Hook/Emotion score chips
+                Surface(color = ElectricViolet.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+                    Text(
+                        text = "H:${clip.viralScore}",
+                        fontSize = 10.sp,
+                        color = ElectricViolet,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            // ── AI HOOK TEXT ─────────────────────────────────────────────────────────
             Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Manual Crop Fine-Tuning:",
-                        fontSize = 11.sp,
-                        color = TextMuted,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = String.format("%.2f", cropSliderValue),
-                        fontSize = 11.sp,
-                        color = NeonOrange,
-                        fontWeight = FontWeight.Bold
-                    )
+                Text("AI Hook Overlay:", fontSize = 11.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                Text(clip.suggestedHookText, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+            }
+
+            Text("Reason: ${clip.reason}", fontSize = 12.sp, color = TextSecondary)
+
+            // ── MANUAL CROP SLIDER ───────────────────────────────────────────────────
+            Column {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Manual Crop Fine-Tuning:", fontSize = 11.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                    Text(String.format("%.2f", cropSliderValue), fontSize = 11.sp, color = NeonOrange, fontWeight = FontWeight.Bold)
                 }
                 Slider(
                     value = cropSliderValue,
-                    onValueChange = {
-                        cropSliderValue = it
-                    },
-                    onValueChangeFinished = {
-                        onUpdateManualCrop(cropSliderValue)
-                    },
+                    onValueChange = { cropSliderValue = it },
+                    onValueChangeFinished = { onUpdateManualCrop(cropSliderValue) },
                     valueRange = -0.5f..0.5f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = NeonOrange,
-                        activeTrackColor = NeonOrange,
-                        inactiveTrackColor = DarkSurfaceVariant
-                    )
+                    colors = SliderDefaults.colors(thumbColor = NeonOrange, activeTrackColor = NeonOrange, inactiveTrackColor = DarkSurfaceVariant)
                 )
             }
 
-            // Hook Text Header
-            Column {
-                Text(
-                    text = "AI Hook Overlay:",
-                    fontSize = 11.sp,
-                    color = TextMuted,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = clip.suggestedHookText,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NeonOrange
-                )
-            }
+            Divider(color = DarkCardBorder)
 
-            // Reason Text
-            Text(
-                text = "Reason: ${clip.reason}",
-                fontSize = 12.sp,
-                color = TextSecondary
-            )
-
-            // Field Toggles Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Export Metadata",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = clip.showTitle,
-                        onClick = { onToggleField("title") },
-                        label = { Text("Title", fontSize = 11.sp) }
-                    )
-                    FilterChip(
-                        selected = clip.showDescription,
-                        onClick = { onToggleField("description") },
-                        label = { Text("Desc", fontSize = 11.sp) }
-                    )
-                    FilterChip(
-                        selected = clip.showTags,
-                        onClick = { onToggleField("tags") },
-                        label = { Text("Tags", fontSize = 11.sp) }
-                    )
-                }
-            }
-
-            // Editable Title Field
-            AnimatedVisibility(visible = clip.showTitle) {
-                OutlinedTextField(
-                    value = editableTitle,
-                    onValueChange = {
-                        editableTitle = it
-                        onUpdateData(it, editableDesc, editableTags)
-                    },
-                    label = { Text("Clip Title") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = NeonOrange,
-                        unfocusedBorderColor = DarkCardBorder
-                    )
-                )
-            }
-
-            // Editable Description Field
-            AnimatedVisibility(visible = clip.showDescription) {
-                OutlinedTextField(
-                    value = editableDesc,
-                    onValueChange = {
-                        editableDesc = it
-                        onUpdateData(editableTitle, it, editableTags)
-                    },
-                    label = { Text("Description / Caption") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = NeonOrange,
-                        unfocusedBorderColor = DarkCardBorder
-                    )
-                )
-            }
-
-            // Editable Tags Field
-            AnimatedVisibility(visible = clip.showTags) {
-                OutlinedTextField(
-                    value = editableTags,
-                    onValueChange = {
-                        editableTags = it
-                        onUpdateData(editableTitle, editableDesc, it)
-                    },
-                    label = { Text("Hashtags (comma separated)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = NeonOrange,
-                        unfocusedBorderColor = DarkCardBorder
-                    )
-                )
-            }
-
-            // Card Action Buttons Row: Preview, Copy Metadata & Download
+            // ── PLATFORM SELECTION TOGGLE ROW ─────────────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = onCopyMetadata,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ElectricViolet)
-                ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Copy Caption & Tags", color = ElectricViolet, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onPlayPreview,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = NeonOrange)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Preview", color = NeonOrange, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = onExport,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Download, contentDescription = null, tint = Color.Black)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Download", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("Post to Platform:", fontSize = 12.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Platform.values().forEach { platform ->
+                        val isSelected = clip.selectedPlatforms.contains(platform)
+                        val platformColor = when (platform) {
+                            Platform.YOUTUBE -> Color(0xFFFF0000)
+                            Platform.INSTAGRAM -> Color(0xFFE1306C)
+                            Platform.TIKTOK -> Color(0xFF69C9D0)
+                            Platform.X -> Color(0xFF1DA1F2)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) platformColor else DarkSurfaceVariant)
+                                .border(1.dp, if (isSelected) platformColor else DarkCardBorder, RoundedCornerShape(8.dp))
+                                .clickable { onTogglePlatform(platform) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "${platform.icon} ${platform.label}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else TextMuted
+                            )
+                        }
                     }
                 }
             }
+
+            // ── PLATFORM-SPECIFIC OUTPUT BLOCKS ──────────────────────────────────────
+
+            // YOUTUBE OUTPUT
+            AnimatedVisibility(
+                visible = clip.selectedPlatforms.contains(Platform.YOUTUBE),
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFF0000).copy(alpha = 0.08f))
+                        .border(1.dp, Color(0xFFFF0000).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("▶ YouTube", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF0000))
+                    }
+
+                    // Title block
+                    PlatformCopyBlock(
+                        label = "TITLE",
+                        content = editableTitle,
+                        accentColor = Color(0xFFFF0000),
+                        context = context
+                    )
+
+                    // Description block
+                    PlatformCopyBlock(
+                        label = "DESCRIPTION",
+                        content = buildString {
+                            append(editableDesc)
+                            if (clip.seoKeywords.isNotEmpty()) {
+                                append("\n\nKeywords: ${clip.seoKeywords.joinToString(", ")}")
+                            }
+                        },
+                        accentColor = Color(0xFFFF0000),
+                        context = context
+                    )
+
+                    // SEO Keywords block
+                    if (clip.seoKeywords.isNotEmpty()) {
+                        PlatformCopyBlock(
+                            label = "SEO KEYWORDS",
+                            content = clip.seoKeywords.joinToString(", "),
+                            accentColor = Color(0xFFFF0000),
+                            context = context
+                        )
+                    }
+                }
+            }
+
+            // INSTAGRAM OUTPUT
+            AnimatedVisibility(
+                visible = clip.selectedPlatforms.contains(Platform.INSTAGRAM),
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFE1306C).copy(alpha = 0.08f))
+                        .border(1.dp, Color(0xFFE1306C).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("📷 Instagram", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE1306C))
+
+                    // Caption + Tags combined (one-click copy)
+                    PlatformCopyBlock(
+                        label = "CAPTION + TAGS",
+                        content = buildInstagramCaption(clip, editableDesc),
+                        accentColor = Color(0xFFE1306C),
+                        context = context
+                    )
+                }
+            }
+
+            // TIKTOK OUTPUT
+            AnimatedVisibility(
+                visible = clip.selectedPlatforms.contains(Platform.TIKTOK),
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF69C9D0).copy(alpha = 0.08f))
+                        .border(1.dp, Color(0xFF69C9D0).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("🎵 TikTok", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2EC1D0))
+
+                    PlatformCopyBlock(
+                        label = "CAPTION + TAGS",
+                        content = buildInstagramCaption(clip, editableDesc),
+                        accentColor = Color(0xFF2EC1D0),
+                        context = context
+                    )
+                }
+            }
+
+            // X (TWITTER) OUTPUT
+            AnimatedVisibility(
+                visible = clip.selectedPlatforms.contains(Platform.X),
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1DA1F2).copy(alpha = 0.08f))
+                        .border(1.dp, Color(0xFF1DA1F2).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("𝕏  X (Twitter)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1DA1F2))
+
+                    // X uses caption + hashtags but URL instead of @handle per BOXABL rules
+                    PlatformCopyBlock(
+                        label = "POST TEXT",
+                        content = buildString {
+                            append(editableDesc.take(280))
+                            val tags = clip.hashtags
+                            if (tags.isNotEmpty()) append("\n${tags.take(5).joinToString(" ")}")
+                        },
+                        accentColor = Color(0xFF1DA1F2),
+                        context = context
+                    )
+                }
+            }
+
+            Divider(color = DarkCardBorder)
+
+            // ── ACTION BUTTONS ROW ────────────────────────────────────────────────────
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = onPlayPreview,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = NeonOrange)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Preview", color = NeonOrange, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = {
+                        onExport()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null, tint = Color.Black)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Export", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // ── MARK AS USED BUTTON ───────────────────────────────────────────────────
+            OutlinedButton(
+                onClick = onMarkUsed,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = if (clip.isUsed) SuccessGreen else TextMuted
+                ),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(
+                        if (clip.isUsed) SuccessGreen else DarkCardBorder
+                    )
+                )
+            ) {
+                Icon(
+                    imageVector = if (clip.isUsed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (clip.isUsed) SuccessGreen else TextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (clip.isUsed) "✓ Marked as Used / Posted" else "Mark as Used",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlatformCopyBlock(
+    label: String,
+    content: String,
+    accentColor: Color,
+    context: Context
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = accentColor,
+                letterSpacing = 1.sp
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(accentColor.copy(alpha = 0.12f))
+                    .clickable {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("ClipForge Copy", content))
+                        Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, tint = accentColor, modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = accentColor)
+                }
+            }
+        }
+
+        Text(
+            text = content,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            lineHeight = 18.sp
+        )
+    }
+}
+
+private fun buildInstagramCaption(clip: ViralClip, desc: String): String {
+    return buildString {
+        append(desc)
+        // Add handles (@boxabl etc from rules)
+        if (clip.handles.isNotEmpty()) {
+            append("\n\n${clip.handles.joinToString(" ")}")
+        }
+        // Add hashtags
+        if (clip.hashtags.isNotEmpty()) {
+            append("\n${clip.hashtags.joinToString(" ")}")
         }
     }
 }

@@ -492,11 +492,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         startTimeSeconds = rawClip.start_time,
                         endTimeSeconds = rawClip.end_time,
                         confidenceScore = rawClip.confidence_score,
+                        viralScore = rawClip.viral_score,
                         suggestedHookText = rawClip.suggested_hook_text,
                         reason = rawClip.reason,
                         title = if (rawClip.suggested_title.isNotBlank()) rawClip.suggested_title else "Viral Moment #$clipNum",
                         description = if (rawClip.suggested_description.isNotBlank()) rawClip.suggested_description else "Check out this highlight!",
-                        tags = if (rawClip.suggested_tags.isNotEmpty()) rawClip.suggested_tags else listOf("#Viral", "#ClipForge", "#Shorts"),
+                        tags = rawClip.suggested_tags,
+                        handles = rawClip.handles,
+                        hashtags = rawClip.hashtags,
+                        seoKeywords = rawClip.seo_keywords,
                         processedVideoPath = videoPath,
                         thumbnailPath = thumbPath,
                         subtitles = rawClip.subtitles,
@@ -590,6 +594,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun showPreviewModal(clip: ViralClip?) {
         _activePreviewClip.value = clip
+    }
+
+    fun markClipAsUsed(clipId: String) {
+        _clips.value = _clips.value.map { clip ->
+            if (clip.id == clipId) {
+                val updated = clip.copy(isUsed = !clip.isUsed)
+                viewModelScope.launch(Dispatchers.IO) { saveClipToRoom(updated) }
+                updated
+            } else clip
+        }
+    }
+
+    fun toggleClipPlatform(clipId: String, platform: Platform) {
+        _clips.value = _clips.value.map { clip ->
+            if (clip.id == clipId) {
+                val current = clip.selectedPlatforms.toMutableSet()
+                if (current.contains(platform)) current.remove(platform) else current.add(platform)
+                clip.copy(selectedPlatforms = current)
+            } else clip
+        }
     }
 
     fun exportAllClips(context: Context) {
