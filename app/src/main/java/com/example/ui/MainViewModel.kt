@@ -101,6 +101,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _subtitleSettings = MutableStateFlow(apiKeyManager.getSubtitleSettings())
     val subtitleSettings: StateFlow<SubtitleSettings> = _subtitleSettings.asStateFlow()
 
+    private val _selectedModel = MutableStateFlow(apiKeyManager.getSelectedModel())
+    val selectedModel: StateFlow<String> = _selectedModel.asStateFlow()
+
     private val _currentProjectId = MutableStateFlow<String?>(null)
     val currentProjectId: StateFlow<String?> = _currentProjectId.asStateFlow()
 
@@ -156,6 +159,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSubtitleSettings(newSettings: SubtitleSettings) {
         _subtitleSettings.value = newSettings
         apiKeyManager.saveSubtitleSettings(newSettings)
+    }
+
+    fun setSelectedModel(model: String) {
+        _selectedModel.value = model
+        apiKeyManager.saveSelectedModel(model)
     }
 
     fun loadProjects() {
@@ -427,7 +435,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     customInstructions = _customInstructions.value,
                     videoDurationSeconds = videoDurationSec,
                     minDurationSeconds = _minDurationSeconds.value,
-                    maxDurationSeconds = _maxDurationSeconds.value
+                    maxDurationSeconds = _maxDurationSeconds.value,
+                    selectedModel = _selectedModel.value
                 )
 
                 if (rawClips.isEmpty()) {

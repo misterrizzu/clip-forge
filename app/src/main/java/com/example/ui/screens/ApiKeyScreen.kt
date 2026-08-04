@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.MainViewModel
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,6 +137,129 @@ fun ApiKeyScreen(
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
                 )
+            }
+
+            Divider(color = MaterialTheme.colorScheme.outline)
+
+            val currentRatio by viewModel.aspectRatio.collectAsState()
+            val minDur by viewModel.minDurationSeconds.collectAsState()
+            val maxDur by viewModel.maxDurationSeconds.collectAsState()
+            var sliderPosition by remember(minDur, maxDur) { mutableStateOf(minDur.toFloat()..maxDur.toFloat()) }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Clip Output Settings",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Text(
+                    text = "Target Aspect Ratio:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    com.example.data.AspectRatio.values().forEach { ratio ->
+                        FilterChip(
+                            selected = ratio == currentRatio,
+                            onClick = { viewModel.setAspectRatio(ratio) },
+                            label = { Text(ratio.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                            modifier = Modifier.weight(1f),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Clip Length Range:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${sliderPosition.start.toInt()}s — ${sliderPosition.endInclusive.toInt()}s",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                RangeSlider(
+                    value = sliderPosition,
+                    onValueChange = { range ->
+                        sliderPosition = range
+                        viewModel.setClipDurationRange(range.start.toInt(), range.endInclusive.toInt())
+                    },
+                    valueRange = 10f..120f,
+                    steps = 21,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Divider(color = MaterialTheme.colorScheme.outline)
+
+            val selectedModel by viewModel.selectedModel.collectAsState()
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Select Gemini AI Model",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Choose the Gemini model for viral clip extraction:",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                val availableModels = listOf(
+                    "gemini-2.5-flash" to "2.5 Flash",
+                    "gemini-3.1-pro" to "3.1 Pro",
+                    "gemini-3.5-flash" to "3.5 Flash",
+                    "gemini-3.6-flash" to "3.6 Flash"
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    availableModels.forEach { (modelId, label) ->
+                        FilterChip(
+                            selected = selectedModel == modelId,
+                            onClick = { viewModel.setSelectedModel(modelId) },
+                            label = {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                    }
+                }
             }
 
             Divider(color = MaterialTheme.colorScheme.outline)

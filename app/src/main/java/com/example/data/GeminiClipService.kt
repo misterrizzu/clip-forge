@@ -84,7 +84,8 @@ class GeminiClipService {
         customInstructions: String,
         videoDurationSeconds: Float,
         minDurationSeconds: Int = 15,
-        maxDurationSeconds: Int = 60
+        maxDurationSeconds: Int = 60,
+        selectedModel: String = "gemini-2.5-flash"
     ): List<RawGeminiClip> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             throw Exception("Invalid Gemini API Key. Please configure a valid API key in Settings.")
@@ -101,6 +102,7 @@ class GeminiClipService {
             Analyze the provided video transcript and speech audio to find high-engagement, viral clips.
 
             CRITICAL DIRECTIVES:
+            0. MAIN SUBJECT FOCUS: Ensure the primary focus is on the main speaker / man speaking in the video for framing and content extraction.
             1. VIRAL SCORING FORMULA (Rate each 0-100):
                - Hook Score (35%): Does first 3s contain stats, name drops, contradictions, questions, or hot takes?
                - Emotion Score (25%): Excitement, speed of speech, vulnerability/personal story, humor, surprise.
@@ -201,7 +203,7 @@ class GeminiClipService {
         }
 
         val request = Request.Builder()
-            .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
+            .url("https://generativelanguage.googleapis.com/v1beta/models/$selectedModel:generateContent?key=$apiKey")
             .post(reqJson.toString().toRequestBody("application/json".toMediaType()))
             .build()
 

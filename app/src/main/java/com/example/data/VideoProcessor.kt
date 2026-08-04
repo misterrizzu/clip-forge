@@ -199,6 +199,7 @@ class VideoProcessor(private val context: Context) {
         manualCropOffset: Float = 0f,
         showHookBanner: Boolean = true,
         showSubtitlesBanner: Boolean = true,
+        subtitleSettings: SubtitleSettings = SubtitleSettings(),
         onProgress: (Float) -> Unit
     ): Pair<String, String?> = withContext(Dispatchers.IO) {
         val clipId = UUID.randomUUID().toString().take(8)

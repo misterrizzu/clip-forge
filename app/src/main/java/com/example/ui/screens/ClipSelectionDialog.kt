@@ -33,7 +33,7 @@ fun ClipSelectionDialog(
     onConfirmSelection: (List<RawGeminiClip>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val selectedIndices = remember { mutableStateSetOf<Int>().apply { addAll(candidateClips.indices) } }
+    val selectedIndices = remember { mutableStateListOf<Int>().apply { addAll(candidateClips.indices) } }
 
     Dialog(
         onDismissRequest = onDismiss,

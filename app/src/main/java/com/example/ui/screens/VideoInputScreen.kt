@@ -4,6 +4,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -141,46 +142,98 @@ fun VideoInputScreen(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Section 1: Video Input Source Tabs
-                Text(
-                    text = "Select Video Source",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = DarkSurface,
-                    contentColor = NeonOrange,
-                    divider = {}
+                // Section 1: Video Input Source Selection
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = {
-                            viewModel.setSelectedTab(0)
-                            viewModel.resetProcessingStatus()
-                        },
-                        text = { Text("Upload Video", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
-                        icon = { Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    Text(
+                        text = "Video Source",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = {
-                            viewModel.setSelectedTab(1)
-                            viewModel.resetProcessingStatus()
-                        },
-                        text = { Text("Google Drive Link", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) },
-                        icon = { Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                    )
+
+                    // Compact Capsule Selector Buttons
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Capsule Button 0: Upload Video
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(if (selectedTab == 0) NeonOrange else Color.Transparent)
+                                .clickable {
+                                    viewModel.setSelectedTab(0)
+                                    viewModel.resetProcessingStatus()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.UploadFile,
+                                    contentDescription = null,
+                                    tint = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Browse File",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // Capsule Button 1: Video Link
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(if (selectedTab == 1) NeonOrange else Color.Transparent)
+                                .clickable {
+                                    viewModel.setSelectedTab(1)
+                                    viewModel.resetProcessingStatus()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudUpload,
+                                    contentDescription = null,
+                                    tint = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Video Link",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
 
                 // Tab Contents
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Box(modifier = Modifier.padding(18.dp)) {
                         when (selectedTab) {
@@ -196,8 +249,8 @@ fun VideoInputScreen(
                                                 .fillMaxWidth()
                                                 .height(110.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
-                                                .background(DarkSurfaceVariant)
+                                                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                                 .clickable { videoPickerLauncher.launch("video/*") },
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -209,8 +262,8 @@ fun VideoInputScreen(
                                                     modifier = Modifier.size(36.dp)
                                                 )
                                                 Spacer(modifier = Modifier.height(6.dp))
-                                                Text("Tap to browse local video file", color = TextPrimary, fontSize = 14.sp)
-                                                Text("MP4, MOV, MKV formats supported", color = TextMuted, fontSize = 11.sp)
+                                                Text("Tap to browse local video file", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                                                Text("MP4, MOV, MKV formats supported", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                                             }
                                         }
                                     } else {
@@ -219,7 +272,7 @@ fun VideoInputScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .background(DarkSurfaceVariant)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                                 .padding(14.dp)
                                         ) {
                                             Icon(
@@ -233,15 +286,15 @@ fun VideoInputScreen(
                                                 Text(
                                                     text = localVideoName ?: "Video Selected",
                                                     fontWeight = FontWeight.Bold,
-                                                    color = TextPrimary,
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                     fontSize = 14.sp,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
-                                                Text("Ready for AI clip generation", fontSize = 12.sp, color = TextSecondary)
+                                                Text("Ready for AI clip generation", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                             IconButton(onClick = { videoPickerLauncher.launch("video/*") }) {
-                                                Icon(Icons.Default.Edit, contentDescription = "Change", tint = TextMuted)
+                                                Icon(Icons.Default.Edit, contentDescription = "Change", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
                                     }
@@ -263,18 +316,18 @@ fun VideoInputScreen(
                                         leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = ElectricViolet) },
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = ElectricViolet,
-                                            unfocusedBorderColor = DarkCardBorder,
-                                            focusedTextColor = TextPrimary,
-                                            unfocusedTextColor = TextPrimary,
-                                            focusedContainerColor = DarkSurfaceVariant,
-                                            unfocusedContainerColor = DarkSurfaceVariant
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
                                         ),
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                     Text(
                                         text = "Note: Ensure file sharing permission is set to 'Anyone with the link can view'.",
                                         fontSize = 11.sp,
-                                        color = TextMuted
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -287,25 +340,25 @@ fun VideoInputScreen(
                     text = "Campaign Rules Document (Optional)",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { rulesPickerLauncher.launch("*/*") }
-                            .padding(16.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(ElectricViolet.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
@@ -314,182 +367,44 @@ fun VideoInputScreen(
                                 imageVector = Icons.Default.Description,
                                 contentDescription = null,
                                 tint = ElectricViolet,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(14.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = rulesFileName ?: "Upload Campaign Rules (PDF/DOCX/TXT)",
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (rulesFileName != null) TextPrimary else TextSecondary,
-                                fontSize = 14.sp,
+                                color = if (rulesFileName != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (rulesFileName != null) "Rules loaded & ready" else "AI will prioritize topics matching your rules",
-                                fontSize = 12.sp,
-                                color = TextMuted
+                                text = if (rulesFileName != null) "Rules loaded & ready" else "AI matches clips to rules",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         if (rulesFileName != null) {
-                            IconButton(onClick = { viewModel.clearRulesFile() }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = ErrorRed)
+                            IconButton(
+                                onClick = { viewModel.clearRulesFile() },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = ErrorRed, modifier = Modifier.size(16.dp))
                             }
                         } else {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = ElectricViolet)
+                            Icon(Icons.Default.Add, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
 
-                // Section 3: Aspect Ratio & Duration Settings
-                Text(
-                    text = "Clip Output Settings",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DarkCardBorder))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Text(
-                            text = "Target Aspect Ratio:",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextSecondary
-                        )
-
-                        val currentRatio by viewModel.aspectRatio.collectAsState()
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            com.example.data.AspectRatio.values().forEach { ratio ->
-                                val selected = ratio == currentRatio
-                                FilterChip(
-                                    selected = selected,
-                                    onClick = { viewModel.setAspectRatio(ratio) },
-                                    label = { Text(ratio.label, fontSize = 12.sp) },
-                                    modifier = Modifier.weight(1f),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = NeonOrange,
-                                        selectedLabelColor = Color.Black
-                                    )
-                                )
-                            }
-                        }
-
-                        Divider(color = MaterialTheme.colorScheme.outline)
-
-                        val minDur by viewModel.minDurationSeconds.collectAsState()
-                        val maxDur by viewModel.maxDurationSeconds.collectAsState()
-                        var sliderPosition by remember(minDur, maxDur) { mutableStateOf(minDur.toFloat()..maxDur.toFloat()) }
-
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Clip Length Range (Drag Min & Max):",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "${sliderPosition.start.toInt()}s — ${sliderPosition.endInclusive.toInt()}s",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            RangeSlider(
-                                value = sliderPosition,
-                                onValueChange = { range ->
-                                    sliderPosition = range
-                                    viewModel.setClipDurationRange(range.start.toInt(), range.endInclusive.toInt())
-                                },
-                                valueRange = 10f..120f,
-                                steps = 21,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        Divider(color = MaterialTheme.colorScheme.outline)
-
-                        Text(
-                            text = "9:16 Canvas Overlays:",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Top Hook Text Banner",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Show AI hook text banner on top empty space",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = showHookBanner,
-                                onCheckedChange = { viewModel.setShowHookBanner(it) }
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Bottom Subtitles Banner",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Burn in spoken dialogue subtitles on bottom space",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = showSubtitlesBanner,
-                                onCheckedChange = { viewModel.setShowSubtitlesBanner(it) }
-                            )
-                        }
-                    }
-                }
-
-                // Section 4: Custom Instructions
+                // Section 3: Custom Instructions
                 Text(
                     text = "Custom Instructions (Optional)",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 OutlinedTextField(
@@ -501,11 +416,11 @@ fun VideoInputScreen(
                     placeholder = { Text("e.g., 'focus on emotional moments, high energy quotes, funny interactions'") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = NeonOrange,
-                        unfocusedBorderColor = DarkCardBorder,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedContainerColor = DarkSurface,
-                        unfocusedContainerColor = DarkSurface
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
                     ),
                     shape = RoundedCornerShape(14.dp)
                 )
@@ -520,7 +435,7 @@ fun VideoInputScreen(
                         text = "Batch Queue (${batchQueue.size})",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     TextButton(onClick = { viewModel.addToBatchQueue() }) {
                         Icon(Icons.Default.Queue, contentDescription = null, tint = NeonOrange, modifier = Modifier.size(16.dp))
@@ -533,7 +448,7 @@ fun VideoInputScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         batchQueue.forEach { task ->
                             Card(
-                                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -549,11 +464,11 @@ fun VideoInputScreen(
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(task.fileName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                        Text("Status: ${task.status.name}", color = TextSecondary, fontSize = 11.sp)
+                                        Text(task.fileName, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text("Status: ${task.status.name}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                                     }
                                     IconButton(onClick = { viewModel.removeBatchQueueTask(task.id) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -645,7 +560,7 @@ fun VideoInputScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -664,12 +579,12 @@ fun VideoInputScreen(
                                 text = "ClipForge Real Pipeline",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
-                                color = TextPrimary
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = status.stepText,
                                 fontSize = 14.sp,
-                                color = TextSecondary,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                             LinearProgressIndicator(
@@ -679,9 +594,13 @@ fun VideoInputScreen(
                                     .height(8.dp)
                                     .clip(RoundedCornerShape(4.dp)),
                                 color = NeonOrange,
-                                trackColor = DarkSurfaceVariant
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         }
+                    }
+                }
+            }
+
             // Pre-Render Clip Selection Dialog
             if (processingStatus is ProcessingPipelineStatus.ReviewCandidateClips) {
                 val reviewStatus = processingStatus as ProcessingPipelineStatus.ReviewCandidateClips

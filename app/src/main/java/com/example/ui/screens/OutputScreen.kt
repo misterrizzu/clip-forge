@@ -112,8 +112,7 @@ fun OutputScreen(
                     }
                 }
             }
-        },
-        containerColor = DarkBackground
+        }
     ) { paddingValues ->
         Box(
             modifier = Modifier

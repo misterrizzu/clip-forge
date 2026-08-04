@@ -85,6 +85,9 @@ class ApiKeyManager(private val context: Context) {
     fun getShowSubtitlesBanner(): Boolean = prefs.getBoolean(KEY_SHOW_SUBTITLES_BANNER, true)
     fun saveShowSubtitlesBanner(show: Boolean) = prefs.edit().putBoolean(KEY_SHOW_SUBTITLES_BANNER, show).apply()
 
+    fun getSelectedModel(): String = prefs.getString(KEY_SELECTED_MODEL, "gemini-2.5-flash") ?: "gemini-2.5-flash"
+    fun saveSelectedModel(model: String) = prefs.edit().putString(KEY_SELECTED_MODEL, model).apply()
+
     companion object {
         private const val PREFS_NAME = "clipforge_secure_prefs"
         private const val PREFS_NAME_FALLBACK = "clipforge_fallback_prefs"
@@ -95,5 +98,6 @@ class ApiKeyManager(private val context: Context) {
         private const val KEY_SUB_POSITION = "sub_position"
         private const val KEY_SHOW_HOOK_BANNER = "show_hook_banner"
         private const val KEY_SHOW_SUBTITLES_BANNER = "show_subtitles_banner"
+        private const val KEY_SELECTED_MODEL = "selected_gemini_model"
     }
 }
