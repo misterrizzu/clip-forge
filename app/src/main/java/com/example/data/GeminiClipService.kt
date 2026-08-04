@@ -35,24 +35,137 @@ class GeminiClipService {
         .build()
 
     /**
-     * Step 1: Parse campaign rules using AI context understanding — NOT regex.
-     * We extract handles/hashtags by looking at context, not blind pattern matching.
+     * Parse campaign rules using Gemini AI for structured extraction, falling back to clean local parsing.
+     */
+    suspend fun parseCampaignRulesWithAI(rulesText: String, apiKey: String): ParsedCampaignRules = withContext(Dispatchers.IO) {
+        if (rulesText.isBlank()) return@withContext ParsedCampaignRules()
+
+        if (apiKey.isNotBlank()) {
+            try {
+                val cleanSample = rulesText.lines()
+                    .filter { isCleanHumanLine(it) }
+                    .joinToString("\n")
+                    .take(8000)
+
+                val prompt = """
+                    You are an expert social media campaign manager and AI rule parser.
+                    Analyze this campaign rules document and extract structured rules. Ignore code/binary formatting noise or URL annotations.
+
+                    CAMPAIGN RULES DOCUMENT:
+                    ${if (cleanSample.length > 50) cleanSample else rulesText.take(6000)}
+
+                    Return ONLY a JSON object with this exact schema:
+                    {
+                      "brandName": "Brand or company name if mentioned",
+                      "contentFocus": "Summary of what content/clips MUST focus on or show",
+                      "forbiddenContent": ["List of things strictly forbidden, disallowed or rejected"],
+                      "requiredHandles": ["@real_handle1"],
+                      "requiredHashtags": ["#hashtag1"],
+                      "requiredCaptionText": "Required text, link or CTA that must be in captions",
+                      "hookStyle": "Hook requirements or guidance for first 3 seconds",
+                      "platformRules": "Platform specific rules for TikTok, YouTube Shorts, Instagram Reels"
+                    }
+                """.trimIndent()
+
+                val jsonPayload = JSONObject().apply {
+                    put("contents", JSONArray().put(JSONObject().apply {
+                        put("parts", JSONArray().put(JSONObject().put("text", prompt)))
+                    }))
+                    put("generationConfig", JSONObject().apply {
+                        put("responseMimeType", "application/json")
+                        put("temperature", 0.1)
+                    })
+                }
+
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
+                val request = Request.Builder()
+                    .url(url)
+                    .post(jsonPayload.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                val response = okHttpClient.newCall(request).execute()
+                val responseBody = response.body?.string() ?: ""
+
+                if (response.isSuccessful && responseBody.isNotBlank()) {
+                    val root = JSONObject(responseBody)
+                    val candidates = root.optJSONArray("candidates")
+                    if (candidates != null && candidates.length() > 0) {
+                        val text = candidates.getJSONObject(0)
+                            .getJSONObject("content")
+                            .getJSONArray("parts")
+                            .getJSONObject(0)
+                            .getString("text")
+
+                        val json = JSONObject(text.trim())
+                        val handles = mutableListOf<String>()
+                        json.optJSONArray("requiredHandles")?.let { arr ->
+                            for (i in 0 until arr.length()) {
+                                val h = arr.getString(i).trim()
+                                if (isRealSocialHandle(h)) handles.add(h)
+                            }
+                        }
+                        val hashtags = mutableListOf<String>()
+                        json.optJSONArray("requiredHashtags")?.let { arr ->
+                            for (i in 0 until arr.length()) {
+                                val tag = arr.getString(i).trim()
+                                if (tag.startsWith("#")) hashtags.add(tag)
+                            }
+                        }
+                        val forbidden = mutableListOf<String>()
+                        json.optJSONArray("forbiddenContent")?.let { arr ->
+                            for (i in 0 until arr.length()) {
+                                forbidden.add(arr.getString(i).trim())
+                            }
+                        }
+
+                        return@withContext ParsedCampaignRules(
+                            brandName = json.optString("brandName", ""),
+                            requiredCaptionText = json.optString("requiredCaptionText", ""),
+                            requiredHandles = handles.distinct(),
+                            requiredHashtags = hashtags.distinct(),
+                            forbiddenContent = forbidden,
+                            contentFocus = json.optString("contentFocus", ""),
+                            hookStyle = json.optString("hookStyle", ""),
+                            platformRules = json.optString("platformRules", "")
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("GeminiClipService", "Error parsing campaign rules with Gemini AI", e)
+            }
+        }
+
+        return@withContext parseCampaignRules(rulesText)
+    }
+
+    private fun isCleanHumanLine(line: String): Boolean {
+        val trimmed = line.trim()
+        if (trimmed.length < 3) return false
+        if (trimmed.startsWith("/") || trimmed.startsWith("%") || trimmed.startsWith("<")) return false
+        if (trimmed.contains("/A/") || trimmed.contains("/URI") || trimmed.contains("/Rect") ||
+            trimmed.contains("/Type") || trimmed.contains("/Annot") || trimmed.contains("/StructParent") ||
+            trimmed.contains("FlateDecode") || trimmed.contains("ObjStm") || trimmed.contains("Identity-H")) return false
+
+        val validCount = trimmed.count { it.isLetterOrDigit() || it.isWhitespace() || ".,:-_()@#/'\"!?$&%*+=".contains(it) }
+        return validCount.toFloat() / trimmed.length > 0.8f
+    }
+
+    /**
+     * Step 1: Parse campaign rules using local context understanding — clean human text.
      */
     fun parseCampaignRules(rulesText: String): ParsedCampaignRules {
         if (rulesText.isBlank()) return ParsedCampaignRules()
 
+        val lines = rulesText.lines().filter { isCleanHumanLine(it) }
+
         // Extract REAL social handles ONLY from explicit attribution sections
-        // Look for lines that explicitly say "tag @xyz" or "use @xyz" — not random @strings
         val realHandles = mutableListOf<String>()
-        val lines = rulesText.lines()
         for (line in lines) {
             val lower = line.lowercase()
-            // Only extract handles from explicit attribution/tagging instruction lines
             if (lower.contains("tag ") || lower.contains("mention ") ||
                 lower.contains("attribution") || lower.contains("credit") ||
                 lower.contains("handle") || lower.contains("@boxabl") ||
                 lower.contains("must tag") || lower.contains("must include @")) {
-                // Extract @handles from THIS line only
                 val matcher = java.util.regex.Pattern.compile("@[a-zA-Z0-9_.]{3,30}").matcher(line)
                 while (matcher.find()) {
                     val handle = matcher.group()
@@ -75,11 +188,6 @@ class GeminiClipService {
                 }
             }
         }
-
-        // Extract brand name (first capitalized brand-looking word near "brand" or product mention)
-        val brandLine = lines.firstOrNull {
-            it.contains("brand", ignoreCase = true) || it.contains("company", ignoreCase = true)
-        } ?: ""
 
         // Extract forbidden content list
         val forbiddenItems = lines
@@ -123,7 +231,7 @@ class GeminiClipService {
             .joinToString("\n")
             .take(400)
 
-        // Extract required caption text (any line with "caption must" or quoted required text)
+        // Extract required caption text
         val captionRequirement = lines
             .filter { it.contains("caption", ignoreCase = true) && (it.contains("must", ignoreCase = true) || it.contains("include", ignoreCase = true)) }
             .joinToString(". ")

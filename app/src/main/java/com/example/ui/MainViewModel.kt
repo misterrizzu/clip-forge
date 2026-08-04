@@ -116,6 +116,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _activePresetId = MutableStateFlow<String?>(null)
     val activePresetId: StateFlow<String?> = _activePresetId.asStateFlow()
 
+    private val _uploadedRulesFileName = MutableStateFlow<String?>(null)
+    val uploadedRulesFileName: StateFlow<String?> = _uploadedRulesFileName.asStateFlow()
+
+    private val _uploadedRulesRawText = MutableStateFlow<String>("")
+    val uploadedRulesRawText: StateFlow<String> = _uploadedRulesRawText.asStateFlow()
+
+    private val _isRulesParsed = MutableStateFlow(false)
+    val isRulesParsed: StateFlow<Boolean> = _isRulesParsed.asStateFlow()
+
+    private val _isParsingRules = MutableStateFlow(false)
+    val isParsingRules: StateFlow<Boolean> = _isParsingRules.asStateFlow()
+
     init {
         loadProjects()
         // Restore persisted queue state from Room DB
@@ -148,20 +160,196 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveRulesPreset(name: String, rulesText: String, fileName: String) {
+    fun onRulesFileSelected(context: Context, uri: Uri, fileName: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _uploadedRulesFileName.value = fileName
+                val text = extractTextFromUri(context, uri)
+                _uploadedRulesRawText.value = text
+                _isRulesParsed.value = false
+                _activePresetId.value = null
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error reading rules file", e)
+                _uploadedRulesRawText.value = "Campaign Rules File: $fileName"
+                _uploadedRulesFileName.value = fileName
+                _isRulesParsed.value = false
+            }
+        }
+    }
+
+    private fun extractTextFromUri(context: Context, uri: Uri): String {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return ""
+            val bytes = inputStream.use { it.readBytes() }
+            val mimeType = context.contentResolver.getType(uri) ?: ""
+
+            val isPdf = mimeType.contains("pdf", ignoreCase = true) ||
+                    uri.toString().contains(".pdf", ignoreCase = true) ||
+                    (bytes.size >= 4 && bytes[0] == '%'.code.toByte() && bytes[1] == 'P'.code.toByte() && bytes[2] == 'D'.code.toByte() && bytes[3] == 'F'.code.toByte())
+
+            if (isPdf) {
+                extractTextFromPdfBytes(bytes)
+            } else {
+                val rawStr = String(bytes, Charsets.UTF_8)
+                rawStr.replace(Regex("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]"), "")
+            }
+        } catch (e: Exception) {
+            Log.e("MainViewModel", "Error extracting text from file", e)
+            ""
+        }
+    }
+
+    private fun extractTextFromPdfBytes(bytes: ByteArray): String {
+        val latin1Str = String(bytes, Charsets.ISO_8859_1)
+        val extractedSnippets = mutableListOf<String>()
+
+        // Find text enclosed in PDF string parentheses (...)
+        val pattern = java.util.regex.Pattern.compile("\\(([^()]{2,500})\\)")
+        val matcher = pattern.matcher(latin1Str)
+
+        while (matcher.find()) {
+            val text = matcher.group(1) ?: continue
+            val trimmed = text.trim()
+            if (trimmed.length > 2 && trimmed.all { it.code in 32..126 || it == '\n' || it == '\r' || it == '\t' }) {
+                if (!trimmed.startsWith("/") && !trimmed.contains("Font") && !trimmed.contains("Encoding") &&
+                    !trimmed.contains("CID") && !trimmed.contains("Identity") && !trimmed.contains("Adobe") &&
+                    !trimmed.contains("ObjStm") && !trimmed.contains("FlateDecode") && !trimmed.contains("Type")) {
+                    extractedSnippets.add(trimmed)
+                }
+            }
+        }
+
+        if (extractedSnippets.isNotEmpty()) {
+            val joined = extractedSnippets.filter { snippet ->
+                val words = snippet.split(Regex("\\s+"))
+                words.size >= 2 || snippet.startsWith("@") || snippet.startsWith("#") || snippet.contains("http")
+            }.joinToString(" ")
+            if (joined.length > 20) return joined
+        }
+
+        // Fallback: line-by-line filtering of printable ASCII lines
+        val lines = latin1Str.lines()
+        val cleanLines = lines.filter { line ->
+            val trimmed = line.trim()
+            trimmed.length in 5..300 &&
+            !trimmed.startsWith("%") &&
+            !trimmed.startsWith("/") &&
+            !trimmed.startsWith("<") &&
+            !trimmed.endsWith("obj") &&
+            !trimmed.endsWith("endobj") &&
+            !trimmed.contains("stream") &&
+            !trimmed.contains("endstream") &&
+            !trimmed.contains("/URI") &&
+            !trimmed.contains("/Rect") &&
+            !trimmed.contains("/Annot") &&
+            !trimmed.contains("/StructParent") &&
+            trimmed.count { it.isLetterOrDigit() || it.isWhitespace() }.toFloat() / trimmed.length > 0.8f
+        }
+
+        return cleanLines.joinToString("\n").trim()
+    }
+
+    fun parseUploadedRules() {
+        val rawText = _uploadedRulesRawText.value
+        val fileName = _uploadedRulesFileName.value ?: "Campaign_Rules"
+        if (rawText.isBlank()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isParsingRules.value = true
+            try {
+                val apiKey = apiKeyManager.getApiKey()
+                val structured = geminiService.parseCampaignRulesWithAI(rawText, apiKey)
+
+                val parsedBuilder = StringBuilder()
+                parsedBuilder.appendLine("📋 CAMPAIGN RULES & INSTRUCTIONS:")
+                if (structured.brandName.isNotBlank()) {
+                    parsedBuilder.appendLine("• Brand: ${structured.brandName}")
+                }
+                if (structured.contentFocus.isNotBlank()) {
+                    parsedBuilder.appendLine("• Content Focus: ${structured.contentFocus}")
+                }
+                if (structured.forbiddenContent.isNotEmpty()) {
+                    parsedBuilder.appendLine("• Forbidden Content (Do Not Include):")
+                    structured.forbiddenContent.forEach { parsedBuilder.appendLine("  - $it") }
+                }
+                if (structured.requiredHandles.isNotEmpty()) {
+                    parsedBuilder.appendLine("• Required @Handles: ${structured.requiredHandles.joinToString(", ")}")
+                }
+                if (structured.requiredHashtags.isNotEmpty()) {
+                    parsedBuilder.appendLine("• Required Hashtags: ${structured.requiredHashtags.joinToString(", ")}")
+                }
+                if (structured.requiredCaptionText.isNotBlank()) {
+                    parsedBuilder.appendLine("• Required Caption Text: ${structured.requiredCaptionText}")
+                }
+                if (structured.hookStyle.isNotBlank()) {
+                    parsedBuilder.appendLine("• Hook Guidance: ${structured.hookStyle}")
+                }
+                if (structured.platformRules.isNotBlank()) {
+                    parsedBuilder.appendLine("• Platform Rules: ${structured.platformRules}")
+                }
+
+                if (parsedBuilder.lines().count { it.isNotBlank() } <= 2) {
+                    val cleanLines = rawText.lines()
+                        .map { it.trim() }
+                        .filter { line ->
+                            line.length > 5 &&
+                            !line.startsWith("/") && !line.startsWith("%") && !line.startsWith("<") &&
+                            !line.contains("/URI") && !line.contains("/Type") && !line.contains("/Annot")
+                        }
+                        .take(15)
+                    parsedBuilder.clear()
+                    parsedBuilder.appendLine("📋 CAMPAIGN RULES & INSTRUCTIONS:")
+                    cleanLines.forEach { line ->
+                        parsedBuilder.appendLine("• $line")
+                    }
+                }
+
+                val finalParsedText = parsedBuilder.toString().trim()
+                _rulesFileContent.value = finalParsedText
+                _rulesFileName.value = fileName
+                _customInstructions.value = finalParsedText
+                _isRulesParsed.value = true
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error parsing campaign rules", e)
+                val cleanLines = rawText.lines()
+                    .map { it.trim() }
+                    .filter { line ->
+                        line.length > 5 &&
+                        !line.startsWith("/") && !line.startsWith("%") && !line.startsWith("<") &&
+                        !line.contains("/URI") && !line.contains("/Type") && !line.contains("/Annot")
+                    }
+                    .take(10)
+                val fallbackText = "📋 CAMPAIGN RULES ($fileName):\n" +
+                        cleanLines.joinToString("\n") { "• $it" }
+                _rulesFileContent.value = fallbackText
+                _rulesFileName.value = fileName
+                _customInstructions.value = fallbackText
+                _isRulesParsed.value = true
+            } finally {
+                _isParsingRules.value = false
+            }
+        }
+    }
+
+    fun saveRulesPreset(name: String) {
+        val textToSave = _customInstructions.value.ifBlank { _rulesFileContent.value }
+        val fileName = _uploadedRulesFileName.value ?: _rulesFileName.value ?: "Campaign_Rules"
+        if (textToSave.isBlank()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val presetName = name.trim().ifBlank { fileName.removeSuffix(".pdf").removeSuffix(".txt").removeSuffix(".docx") }
             val preset = com.example.data.db.CampaignRulePresetEntity(
                 id = java.util.UUID.randomUUID().toString(),
-                name = name.trim().ifBlank { fileName },
-                rulesText = rulesText,
+                name = presetName,
+                rulesText = textToSave,
                 fileName = fileName
             )
             clipDao.insertPreset(preset)
             _campaignRulePresets.value = clipDao.getAllPresets()
-            // Auto-select the newly saved preset
             _activePresetId.value = preset.id
-            _rulesFileContent.value = rulesText
+            _rulesFileContent.value = textToSave
             _rulesFileName.value = preset.name
+            _customInstructions.value = textToSave
         }
     }
 
@@ -169,9 +357,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _activePresetId.value = preset.id
         _rulesFileContent.value = preset.rulesText
         _rulesFileName.value = preset.name
+        _customInstructions.value = preset.rulesText
+        _uploadedRulesFileName.value = null
+        _uploadedRulesRawText.value = ""
+        _isRulesParsed.value = false
     }
 
     fun clearRulesPresetSelection() {
+        _activePresetId.value = null
+        _rulesFileContent.value = ""
+        _rulesFileName.value = null
+    }
+
+    fun clearUploadedRules() {
+        _uploadedRulesFileName.value = null
+        _uploadedRulesRawText.value = ""
+        _isRulesParsed.value = false
         _activePresetId.value = null
         _rulesFileContent.value = ""
         _rulesFileName.value = null

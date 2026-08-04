@@ -57,10 +57,10 @@ fun VideoInputScreen(
     val showSubtitlesBanner by viewModel.showSubtitlesBanner.collectAsState()
     val campaignRulePresets by viewModel.campaignRulePresets.collectAsState()
     val activePresetId by viewModel.activePresetId.collectAsState()
+    val uploadedRulesFileName by viewModel.uploadedRulesFileName.collectAsState()
+    val isRulesParsed by viewModel.isRulesParsed.collectAsState()
+    val isParsingRules by viewModel.isParsingRules.collectAsState()
 
-    // Pending rules text waiting to be named and saved as preset
-    var pendingRulesText by remember { mutableStateOf("") }
-    var pendingRulesFileName by remember { mutableStateOf("") }
     var showSavePresetDialog by remember { mutableStateOf(false) }
     var presetNameInput by remember { mutableStateOf("") }
 
@@ -92,11 +92,8 @@ fun VideoInputScreen(
                     fileName = cursor.getString(nameIndex)
                 }
             }
-            // Read the file and open the Save Preset dialog
-            viewModel.readAndSetRulesFile(context, uri, fileName)
-            pendingRulesFileName = fileName
+            viewModel.onRulesFileSelected(context, uri, fileName)
             presetNameInput = fileName.removeSuffix(".pdf").removeSuffix(".txt").removeSuffix(".docx")
-            showSavePresetDialog = true
         }
     }
 
@@ -357,62 +354,70 @@ fun VideoInputScreen(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                // Saved Presets horizontal scrollable chips row
+                // Subsection 1: Previously Saved Presets
                 if (campaignRulePresets.isNotEmpty()) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(campaignRulePresets) { preset ->
-                            val isActive = preset.id == activePresetId
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(
-                                        if (isActive) ElectricViolet else MaterialTheme.colorScheme.surfaceVariant
-                                    )
-                                    .border(
-                                        1.dp,
-                                        if (isActive) ElectricViolet else MaterialTheme.colorScheme.outline,
-                                        RoundedCornerShape(20.dp)
-                                    )
-                                    .clickable { viewModel.selectRulesPreset(preset) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Saved Campaign Presets",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(campaignRulePresets) { preset ->
+                                val isActive = preset.id == activePresetId
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(
+                                            if (isActive) ElectricViolet else MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (isActive) ElectricViolet else MaterialTheme.colorScheme.outline,
+                                            RoundedCornerShape(20.dp)
+                                        )
+                                        .clickable { viewModel.selectRulesPreset(preset) }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = if (isActive) Icons.Default.CheckCircle else Icons.Default.Description,
-                                        contentDescription = null,
-                                        tint = if (isActive) Color.White else ElectricViolet,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        text = preset.name,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
-                                    )
-                                    if (isActive) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
                                         Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Deselect",
-                                            tint = Color.White.copy(alpha = 0.7f),
-                                            modifier = Modifier
-                                                .size(14.dp)
-                                                .clickable { viewModel.clearRulesPresetSelection() }
+                                            imageVector = if (isActive) Icons.Default.CheckCircle else Icons.Default.Description,
+                                            contentDescription = null,
+                                            tint = if (isActive) Color.White else ElectricViolet,
+                                            modifier = Modifier.size(14.dp)
                                         )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Default.DeleteOutline,
-                                            contentDescription = "Delete Preset",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                            modifier = Modifier
-                                                .size(14.dp)
-                                                .clickable { viewModel.deleteRulesPreset(preset.id) }
+                                        Text(
+                                            text = preset.name,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
                                         )
+                                        if (isActive) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Deselect",
+                                                tint = Color.White.copy(alpha = 0.7f),
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .clickable { viewModel.clearRulesPresetSelection() }
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.DeleteOutline,
+                                                contentDescription = "Delete Preset",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .clickable { viewModel.deleteRulesPreset(preset.id) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -420,66 +425,146 @@ fun VideoInputScreen(
                     }
                 }
 
-                // Add New Preset button
+                // Subsection 2: Upload New Campaign Rules File Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(
                         1.dp,
-                        if (activePresetId != null) ElectricViolet.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline
+                        if (uploadedRulesFileName != null && !isRulesParsed) NeonOrange
+                        else if (activePresetId != null) ElectricViolet
+                        else MaterialTheme.colorScheme.outline
                     )
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { rulesPickerLauncher.launch("*/*") }
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Box(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (activePresetId != null) ElectricViolet.copy(alpha = 0.15f)
-                                    else MaterialTheme.colorScheme.surfaceVariant
-                                ),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .clickable { rulesPickerLauncher.launch("*/*") }
                         ) {
-                            Icon(
-                                imageVector = if (activePresetId != null) Icons.Default.Verified else Icons.Default.Add,
-                                contentDescription = null,
-                                tint = ElectricViolet,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (activePresetId != null) ElectricViolet.copy(alpha = 0.15f)
+                                        else if (uploadedRulesFileName != null) NeonOrange.copy(alpha = 0.15f)
+                                        else MaterialTheme.colorScheme.surfaceVariant
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (activePresetId != null) Icons.Default.Verified
+                                    else if (uploadedRulesFileName != null) Icons.Default.Description
+                                    else Icons.Default.UploadFile,
+                                    contentDescription = null,
+                                    tint = if (activePresetId != null) ElectricViolet
+                                    else if (uploadedRulesFileName != null) NeonOrange
+                                    else ElectricViolet,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = when {
+                                        activePresetId != null -> "Preset Active: ${rulesFileName ?: "Rules Loaded"}"
+                                        uploadedRulesFileName != null -> uploadedRulesFileName!!
+                                        else -> "Upload Campaign Rules File"
+                                    },
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = when {
+                                        activePresetId != null -> "✓ Preset instructions active in Custom Instructions"
+                                        uploadedRulesFileName != null && isRulesParsed -> "✓ Rules parsed into Custom Instructions below"
+                                        uploadedRulesFileName != null -> "File uploaded — Click 'Parse Campaign Rules' below"
+                                        else -> "PDF, TXT, DOCX — Upload to parse into instructions"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = if (activePresetId != null || (uploadedRulesFileName != null && isRulesParsed)) ElectricViolet
+                                    else if (uploadedRulesFileName != null) NeonOrange
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (uploadedRulesFileName != null || activePresetId != null) {
+                                IconButton(
+                                    onClick = { viewModel.clearUploadedRules() },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Browse",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ElectricViolet
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (activePresetId != null) rulesFileName ?: "Rules Loaded"
-                                       else "Upload Campaign Rules File",
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (activePresetId != null) MaterialTheme.colorScheme.onSurface
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = if (activePresetId != null) "✓ Active — AI will follow these rules"
-                                       else "PDF, TXT, DOCX — saved as reusable preset",
-                                fontSize = 11.sp,
-                                color = if (activePresetId != null) ElectricViolet
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+
+                        // Parse Button & Save Preset Workflow below uploaded file
+                        if (uploadedRulesFileName != null && activePresetId == null) {
+                            if (!isRulesParsed) {
+                                Button(
+                                    onClick = { viewModel.parseUploadedRules() },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !isParsingRules,
+                                    colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    if (isParsingRules) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Parsing Campaign Rules...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    } else {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Parse Campaign Rules", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "✓ Parsed & added to Custom Instructions",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = ElectricViolet
+                                    )
+                                    OutlinedButton(
+                                        onClick = { showSavePresetDialog = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(1.dp, ElectricViolet)
+                                    ) {
+                                        Icon(Icons.Default.BookmarkAdd, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Save Preset", fontSize = 12.sp, color = ElectricViolet, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
-                        Icon(
-                            imageVector = Icons.Default.UploadFile,
-                            contentDescription = null,
-                            tint = ElectricViolet,
-                            modifier = Modifier.size(20.dp)
-                        )
                     }
                 }
 
@@ -487,11 +572,11 @@ fun VideoInputScreen(
                 if (showSavePresetDialog) {
                     AlertDialog(
                         onDismissRequest = { showSavePresetDialog = false },
-                        title = { Text("Save as Campaign Preset", fontWeight = FontWeight.Bold) },
+                        title = { Text("Save Campaign Rules Preset", fontWeight = FontWeight.Bold) },
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(
-                                    text = "Give this rules file a name so you can reuse it across campaigns:",
+                                    text = "Name this preset to reuse its parsed instructions in future campaigns:",
                                     fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -510,15 +595,10 @@ fun VideoInputScreen(
                         confirmButton = {
                             Button(
                                 onClick = {
-                                    val rulesText = viewModel.rulesFileContent.value
-                                    if (rulesText.isNotBlank()) {
-                                        viewModel.saveRulesPreset(
-                                            name = presetNameInput,
-                                            rulesText = rulesText,
-                                            fileName = pendingRulesFileName
-                                        )
+                                    if (presetNameInput.isNotBlank()) {
+                                        viewModel.saveRulesPreset(presetNameInput)
+                                        showSavePresetDialog = false
                                     }
-                                    showSavePresetDialog = false
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
                             ) {
@@ -527,7 +607,7 @@ fun VideoInputScreen(
                         },
                         dismissButton = {
                             TextButton(onClick = { showSavePresetDialog = false }) {
-                                Text("Use Once (Don't Save)")
+                                Text("Cancel")
                             }
                         },
                         shape = RoundedCornerShape(16.dp)
