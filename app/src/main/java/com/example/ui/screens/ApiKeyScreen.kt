@@ -618,6 +618,28 @@ fun ApiKeyScreen(
                 )
             }
 
+            Divider(color = MaterialTheme.colorScheme.outline)
+
+            // Storage Maintenance Button
+            OutlinedButton(
+                onClick = {
+                    viewModel.clearUnusedTempCache()
+                    android.widget.Toast.makeText(context, "Temporary video source files cleared!", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = ErrorRed,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "Clear Temporary Source Video Files", fontWeight = FontWeight.SemiBold, color = ErrorRed)
+            }
+
             // Button 1: Get API Key
             OutlinedButton(
                 onClick = {

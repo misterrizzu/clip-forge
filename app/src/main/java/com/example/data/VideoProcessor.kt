@@ -57,6 +57,27 @@ class VideoProcessor(private val context: Context) {
         return@withContext destFile
     }
 
+    /**
+     * Clean up temporary source video file and leftover audio extraction files
+     * so app storage doesn't grow by 1GB-2GB per video session.
+     */
+    fun cleanUpSourceAndTempFiles(sourceVideoFile: File) {
+        try {
+            if (sourceVideoFile.exists() && sourceVideoFile.name.startsWith("source_input_")) {
+                val deleted = sourceVideoFile.delete()
+                Log.d("VideoProcessor", "Deleted temp source video file ${sourceVideoFile.name}: $deleted")
+            }
+            // Delete any leftover temp audio_track_ files in clips directory
+            outputDir.listFiles()?.forEach { file ->
+                if (file.name.startsWith("audio_track_") || (file.name.startsWith("source_input_") && file.lastModified() < System.currentTimeMillis() - 3600000)) {
+                    file.delete()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VideoProcessor", "Error cleaning up temporary source files", e)
+        }
+    }
+
     suspend fun extractAudioBase64(videoFile: File): String? = withContext(Dispatchers.IO) {
         val audioFile = File(outputDir, "audio_track_${System.currentTimeMillis()}.m4a")
         val extractor = MediaExtractor()

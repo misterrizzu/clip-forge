@@ -586,6 +586,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _processingStatus.value = ProcessingPipelineStatus.Idle
     }
 
+    fun clearUnusedTempCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val filesDir = getApplication<Application>().filesDir
+                val clipsDir = File(filesDir, "clips")
+                clipsDir.listFiles()?.forEach { file ->
+                    if (file.name.startsWith("source_input_") || file.name.startsWith("audio_track_")) {
+                        file.delete()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error clearing temp cache", e)
+            }
+        }
+    }
+
     fun addToBatchQueue() {
         val task = if (_selectedTab.value == 0) {
             val uri = _localVideoUri.value ?: return
@@ -797,6 +813,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Save clips under this project
                 saveClipsToRoom(generatedViralClips, projectId)
                 loadProjects()
+
+                // Clean up main 1GB-2GB temporary source video file to prevent storage bloat
+                videoProcessor.cleanUpSourceAndTempFiles(videoFile)
 
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Error rendering approved clips", e)
