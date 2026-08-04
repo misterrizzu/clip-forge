@@ -3,6 +3,8 @@ package com.example.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -27,9 +29,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.example.data.Platform
 import com.example.data.ViralClip
@@ -282,7 +284,6 @@ fun ViralClipCard(
                     }
                 }
 
-                // Hook/Emotion score chips
                 Surface(color = ElectricViolet.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
                     Text(
                         text = "H:${clip.viralScore}",
@@ -379,28 +380,24 @@ fun ViralClipCard(
                         context = context
                     )
 
-                    // Description block
+                    // Combined Description + Keywords + Tags Block
                     PlatformCopyBlock(
-                        label = "DESCRIPTION",
+                        label = "DESCRIPTION, KEYWORDS & TAGS",
                         content = buildString {
+                            append("Description:\n")
                             append(editableDesc)
                             if (clip.seoKeywords.isNotEmpty()) {
-                                append("\n\nKeywords: ${clip.seoKeywords.joinToString(", ")}")
+                                append("\n\nSEO Keywords:\n")
+                                append(clip.seoKeywords.joinToString(", "))
+                            }
+                            if (clip.hashtags.isNotEmpty()) {
+                                append("\n\nHashtags:\n")
+                                append(clip.hashtags.joinToString(" "))
                             }
                         },
                         accentColor = Color(0xFFFF0000),
                         context = context
                     )
-
-                    // SEO Keywords block
-                    if (clip.seoKeywords.isNotEmpty()) {
-                        PlatformCopyBlock(
-                            label = "SEO KEYWORDS",
-                            content = clip.seoKeywords.joinToString(", "),
-                            accentColor = Color(0xFFFF0000),
-                            context = context
-                        )
-                    }
                 }
             }
 
@@ -421,7 +418,6 @@ fun ViralClipCard(
                 ) {
                     Text("📷 Instagram", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE1306C))
 
-                    // Caption + Tags combined (one-click copy)
                     PlatformCopyBlock(
                         label = "CAPTION + TAGS",
                         content = buildInstagramCaption(clip, editableDesc),
@@ -474,7 +470,6 @@ fun ViralClipCard(
                 ) {
                     Text("𝕏  X (Twitter)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1DA1F2))
 
-                    // X uses caption + hashtags but URL instead of @handle per BOXABL rules
                     PlatformCopyBlock(
                         label = "POST TEXT",
                         content = buildString {
@@ -490,7 +485,55 @@ fun ViralClipCard(
 
             Divider(color = DarkCardBorder)
 
-            // ── ACTION BUTTONS ROW ────────────────────────────────────────────────────
+            // ── COMPACT DIRECT SOCIAL ACTION BAR ──────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Direct YouTube Upload Button
+                CompactPlatformButton(
+                    label = "YouTube",
+                    iconSymbol = "▶",
+                    containerColor = Color(0xFFFF0000),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    shareVideoToApp(
+                        context = context,
+                        videoPath = clip.processedVideoPath,
+                        packageName = "com.google.android.youtube",
+                        textToCopy = editableTitle
+                    )
+                }
+
+                // Direct Instagram Upload Button
+                CompactPlatformButton(
+                    label = "Instagram",
+                    iconSymbol = "📷",
+                    containerColor = Color(0xFFE1306C),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    val caption = buildInstagramCaption(clip, editableDesc)
+                    shareVideoToApp(
+                        context = context,
+                        videoPath = clip.processedVideoPath,
+                        packageName = "com.instagram.android",
+                        textToCopy = caption
+                    )
+                }
+
+                // System Share Sheet Button
+                CompactPlatformButton(
+                    label = "Share",
+                    iconSymbol = "📤",
+                    containerColor = ElectricViolet,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    shareVideoGeneric(context, clip.processedVideoPath, editableTitle)
+                }
+            }
+
+            // ── ACTION BUTTONS ROW: PREVIEW & DOWNLOAD ────────────────────────────────
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
                     onClick = onPlayPreview,
@@ -503,9 +546,7 @@ fun ViralClipCard(
                 }
 
                 Button(
-                    onClick = {
-                        onExport()
-                    },
+                    onClick = onExport,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = NeonOrange),
                     shape = RoundedCornerShape(12.dp)
@@ -548,6 +589,32 @@ fun ViralClipCard(
 }
 
 @Composable
+private fun CompactPlatformButton(
+    label: String,
+    iconSymbol: String,
+    containerColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(38.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = containerColor),
+        shape = RoundedCornerShape(10.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(text = iconSymbol, fontSize = 12.sp, color = Color.White)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        }
+    }
+}
+
+@Composable
 private fun PlatformCopyBlock(
     label: String,
     content: String,
@@ -581,7 +648,7 @@ private fun PlatformCopyBlock(
                     .clickable {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("ClipForge Copy", content))
-                        Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Copied to Clipboard!", Toast.LENGTH_SHORT).show()
                     }
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
@@ -602,14 +669,90 @@ private fun PlatformCopyBlock(
     }
 }
 
+private fun shareVideoToApp(
+    context: Context,
+    videoPath: String?,
+    packageName: String,
+    textToCopy: String
+) {
+    if (videoPath.isNullOrEmpty()) {
+        Toast.makeText(context, "Video file not found", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    val file = File(videoPath)
+    if (!file.exists()) {
+        Toast.makeText(context, "Video file missing", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    try {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Social Text", textToCopy))
+        Toast.makeText(context, "Text copied! Opening app...", Toast.LENGTH_SHORT).show()
+
+        val contentUri: Uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "video/*"
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_TEXT, textToCopy)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setPackage(packageName)
+        }
+
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        val genericIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "video/*"
+            val contentUri: Uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_TEXT, textToCopy)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(genericIntent, "Share Video"))
+    }
+}
+
+private fun shareVideoGeneric(context: Context, videoPath: String?, title: String) {
+    if (videoPath.isNullOrEmpty()) return
+    val file = File(videoPath)
+    if (!file.exists()) return
+
+    try {
+        val contentUri: Uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "video/*"
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_SUBJECT, title)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(intent, "Share Clip"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Sharing failed", Toast.LENGTH_SHORT).show()
+    }
+}
+
 private fun buildInstagramCaption(clip: ViralClip, desc: String): String {
     return buildString {
         append(desc)
-        // Add handles (@boxabl etc from rules)
         if (clip.handles.isNotEmpty()) {
             append("\n\n${clip.handles.joinToString(" ")}")
         }
-        // Add hashtags
         if (clip.hashtags.isNotEmpty()) {
             append("\n${clip.hashtags.joinToString(" ")}")
         }
