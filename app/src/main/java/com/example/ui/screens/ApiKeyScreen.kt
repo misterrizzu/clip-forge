@@ -11,8 +11,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Security
@@ -418,6 +421,201 @@ fun ApiKeyScreen(
                         }
                     }
                 }
+            }
+
+            Divider(color = MaterialTheme.colorScheme.outline)
+
+            // ── CAMPAIGN RULE PRESETS MANAGER (SETTINGS) ─────────────────────────
+            val presets by viewModel.campaignRulePresets.collectAsState()
+            var editingPreset by remember { mutableStateOf<com.example.data.db.CampaignRulePresetEntity?>(null) }
+            var isCreatingNewPreset by remember { mutableStateOf(false) }
+            var presetNameInput by remember { mutableStateOf("") }
+            var presetTextInput by remember { mutableStateOf("") }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Campaign Rule Presets",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Create, edit & manage rules presets",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            presetNameInput = ""
+                            presetTextInput = ""
+                            isCreatingNewPreset = true
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = ElectricViolet,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Preset", color = ElectricViolet, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (presets.isEmpty()) {
+                    Text(
+                        text = "No saved presets yet. Tap '+ Add Preset' or write rules manually.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        presets.forEach { preset ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = preset.name,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (preset.rulesText.length > 60) preset.rulesText.take(60) + "..." else preset.rulesText,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Row {
+                                        IconButton(
+                                            onClick = {
+                                                editingPreset = preset
+                                                presetNameInput = preset.name
+                                                presetTextInput = preset.rulesText
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Edit",
+                                                tint = ElectricViolet,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { viewModel.deleteRulesPreset(preset.id) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete",
+                                                tint = ErrorRed,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Dialog for Add/Edit Preset
+            if (isCreatingNewPreset || editingPreset != null) {
+                AlertDialog(
+                    onDismissRequest = {
+                        isCreatingNewPreset = false
+                        editingPreset = null
+                    },
+                    title = {
+                        Text(
+                            text = if (isCreatingNewPreset) "Create Campaign Preset" else "Edit Campaign Preset",
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = presetNameInput,
+                                onValueChange = { presetNameInput = it },
+                                label = { Text("Preset Name") },
+                                placeholder = { Text("e.g. Boxabl Campaign, Trailblazers") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = presetTextInput,
+                                onValueChange = { presetTextInput = it },
+                                label = { Text("Campaign Rules / Instructions Text") },
+                                placeholder = { Text("Enter target handles, required caption text, rules...") },
+                                minLines = 5,
+                                maxLines = 8,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (presetNameInput.isNotBlank() && presetTextInput.isNotBlank()) {
+                                    if (isCreatingNewPreset) {
+                                        viewModel.saveRulesPreset(
+                                            name = presetNameInput,
+                                            rulesText = presetTextInput,
+                                            fileName = presetNameInput
+                                        )
+                                    } else if (editingPreset != null) {
+                                        viewModel.updateRulesPreset(
+                                            presetId = editingPreset!!.id,
+                                            newName = presetNameInput,
+                                            newRulesText = presetTextInput
+                                        )
+                                    }
+                                }
+                                isCreatingNewPreset = false
+                                editingPreset = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
+                        ) {
+                            Text("Save", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                isCreatingNewPreset = false
+                                editingPreset = null
+                            }
+                        ) {
+                            Text("Cancel")
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp)
+                )
             }
 
             // Button 1: Get API Key

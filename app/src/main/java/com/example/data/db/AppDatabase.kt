@@ -122,6 +122,9 @@ interface ClipDao {
 
     @Query("UPDATE campaign_rule_presets SET name = :newName WHERE id = :id")
     suspend fun renamePreset(id: String, newName: String)
+
+    @Query("UPDATE campaign_rule_presets SET name = :newName, rulesText = :newRulesText WHERE id = :id")
+    suspend fun updatePreset(id: String, newName: String, newRulesText: String)
 }
 
 @Database(

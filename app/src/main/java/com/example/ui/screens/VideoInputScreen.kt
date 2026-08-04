@@ -347,20 +347,19 @@ fun VideoInputScreen(
                 }
 
                 // Section 2: Campaign Rules Presets
+                // Section 2: Campaign Rule Presets Selector
                 Text(
-                    text = "Campaign Rules",
+                    text = "Campaign Rule Preset",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                // Subsection 1: Previously Saved Presets
                 if (campaignRulePresets.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "Saved Campaign Presets",
+                            text = "Select a saved campaign preset (or manage them in Settings ⚙️):",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         LazyRow(
@@ -379,15 +378,21 @@ fun VideoInputScreen(
                                             if (isActive) ElectricViolet else MaterialTheme.colorScheme.outline,
                                             RoundedCornerShape(20.dp)
                                         )
-                                        .clickable { viewModel.selectRulesPreset(preset) }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .clickable {
+                                            if (isActive) {
+                                                viewModel.clearRulesPresetSelection()
+                                            } else {
+                                                viewModel.selectRulesPreset(preset)
+                                            }
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 8.dp)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Icon(
-                                            imageVector = if (isActive) Icons.Default.CheckCircle else Icons.Default.Description,
+                                            imageVector = if (isActive) Icons.Default.CheckCircle else Icons.Default.BookmarkBorder,
                                             contentDescription = null,
                                             tint = if (isActive) Color.White else ElectricViolet,
                                             modifier = Modifier.size(14.dp)
@@ -403,19 +408,8 @@ fun VideoInputScreen(
                                             Icon(
                                                 imageVector = Icons.Default.Close,
                                                 contentDescription = "Deselect",
-                                                tint = Color.White.copy(alpha = 0.7f),
-                                                modifier = Modifier
-                                                    .size(14.dp)
-                                                    .clickable { viewModel.clearRulesPresetSelection() }
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Default.DeleteOutline,
-                                                contentDescription = "Delete Preset",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                                modifier = Modifier
-                                                    .size(14.dp)
-                                                    .clickable { viewModel.deleteRulesPreset(preset.id) }
+                                                tint = Color.White.copy(alpha = 0.8f),
+                                                modifier = Modifier.size(14.dp)
                                             )
                                         }
                                     }
@@ -423,9 +417,50 @@ fun VideoInputScreen(
                             }
                         }
                     }
+                } else {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenSettings() },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = null,
+                                tint = ElectricViolet,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "No Saved Presets Found",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Tap to open Settings ⚙️ and add campaign rule presets.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ArrowForward,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
 
-                // Subsection 2: Upload New Campaign Rules File Card
+                // Subsection 2: Direct File Upload Fallback
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

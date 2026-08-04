@@ -378,6 +378,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _rulesFileName.value = null
     }
 
+    fun updateRulesPreset(presetId: String, newName: String, newRulesText: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            clipDao.updatePreset(presetId, newName.trim(), newRulesText.trim())
+            val updatedList = clipDao.getAllPresets()
+            _campaignRulePresets.value = updatedList
+            if (_activePresetId.value == presetId) {
+                _rulesFileContent.value = newRulesText.trim()
+                _rulesFileName.value = newName.trim()
+            }
+        }
+    }
+
     fun deleteRulesPreset(presetId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             clipDao.deletePreset(presetId)
