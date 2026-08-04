@@ -110,6 +110,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _projectFolders = MutableStateFlow<List<ProjectFolder>>(emptyList())
     val projectFolders: StateFlow<List<ProjectFolder>> = _projectFolders.asStateFlow()
 
+    private val _campaignRulePresets = MutableStateFlow<List<com.example.data.db.CampaignRulePresetEntity>>(emptyList())
+    val campaignRulePresets: StateFlow<List<com.example.data.db.CampaignRulePresetEntity>> = _campaignRulePresets.asStateFlow()
+
+    private val _activePresetId = MutableStateFlow<String?>(null)
+    val activePresetId: StateFlow<String?> = _activePresetId.asStateFlow()
+
     init {
         loadProjects()
         // Restore persisted queue state from Room DB
@@ -131,6 +137,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _batchQueue.value = dbQueue
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Error restoring queue from Room database", e)
+            }
+        }
+        loadPresets()
+    }
+
+    fun loadPresets() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _campaignRulePresets.value = clipDao.getAllPresets()
+        }
+    }
+
+    fun saveRulesPreset(name: String, rulesText: String, fileName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val preset = com.example.data.db.CampaignRulePresetEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                name = name.trim().ifBlank { fileName },
+                rulesText = rulesText,
+                fileName = fileName
+            )
+            clipDao.insertPreset(preset)
+            _campaignRulePresets.value = clipDao.getAllPresets()
+            // Auto-select the newly saved preset
+            _activePresetId.value = preset.id
+            _rulesFileContent.value = rulesText
+            _rulesFileName.value = preset.name
+        }
+    }
+
+    fun selectRulesPreset(preset: com.example.data.db.CampaignRulePresetEntity) {
+        _activePresetId.value = preset.id
+        _rulesFileContent.value = preset.rulesText
+        _rulesFileName.value = preset.name
+    }
+
+    fun clearRulesPresetSelection() {
+        _activePresetId.value = null
+        _rulesFileContent.value = ""
+        _rulesFileName.value = null
+    }
+
+    fun deleteRulesPreset(presetId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            clipDao.deletePreset(presetId)
+            _campaignRulePresets.value = clipDao.getAllPresets()
+            if (_activePresetId.value == presetId) {
+                _activePresetId.value = null
+                _rulesFileContent.value = ""
+                _rulesFileName.value = null
             }
         }
     }

@@ -51,6 +51,15 @@ data class QueueItemEntity(
     val timestampMs: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "campaign_rule_presets")
+data class CampaignRulePresetEntity(
+    @PrimaryKey val id: String,
+    val name: String,                   // User-given name e.g. "BOXABL Campaign"
+    val rulesText: String,              // Full parsed text of the rules document
+    val fileName: String = "",          // Original filename (for display)
+    val createdAtMs: Long = System.currentTimeMillis()
+)
+
 @Dao
 interface ClipDao {
     @Query("SELECT * FROM projects ORDER BY createdAtMs DESC")
@@ -100,9 +109,26 @@ interface ClipDao {
 
     @Query("DELETE FROM batch_queue WHERE status = 'COMPLETED'")
     suspend fun clearCompletedQueue()
+
+    // ── CAMPAIGN RULE PRESETS ──────────────────────────────────────────────────
+    @Query("SELECT * FROM campaign_rule_presets ORDER BY createdAtMs DESC")
+    suspend fun getAllPresets(): List<CampaignRulePresetEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPreset(preset: CampaignRulePresetEntity)
+
+    @Query("DELETE FROM campaign_rule_presets WHERE id = :id")
+    suspend fun deletePreset(id: String)
+
+    @Query("UPDATE campaign_rule_presets SET name = :newName WHERE id = :id")
+    suspend fun renamePreset(id: String, newName: String)
 }
 
-@Database(entities = [ProjectEntity::class, ClipEntity::class, QueueItemEntity::class], version = 2, exportSchema = false)
+@Database(
+    entities = [ProjectEntity::class, ClipEntity::class, QueueItemEntity::class, CampaignRulePresetEntity::class],
+    version = 3,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun clipDao(): ClipDao
 
